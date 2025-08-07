@@ -3,7 +3,7 @@ clear
 % Vraj Patel
 
 % Case 1 part 2 - Inclination change Hohmann transfer
-
+% got it to work 0 true anomaly - not varying
 % constats
 au = 149597870.691; 
 mu = 1.327e11;
@@ -11,30 +11,33 @@ mu = 1.327e11;
 % Dept Orbit 
 a1 = 1*au; 
 e1 = 0; 
-f1 = deg2rad(0);
+f1 = deg2rad(00);
 T1 = 2*pi*sqrt(a1^3/mu); 
-I1 = deg2rad(50); 
+I1 = deg2rad(60); 
 
 % Arrival Orbit (to be changed)
 a2= 1.524*au;
 e2 = 0; 
-f2 = f1 + pi; 
+I2 = deg2rad(20);
 T2 = 2*pi*sqrt(a2^3/mu); 
-I2 = deg2rad(130);
 
 % transfer orbit
 a_transfer = .5*(a1+a2); 
 e_transfer = (a2-a1)/(a1+a2);  % only for hohmann
-alpha = deg2rad(-20); 
+alpha = deg2rad(-30); 
 beta = I2-I1-alpha;
 IT = I1 + alpha; 
-
 
 % Time of flight
 TOF = pi*sqrt(a_transfer^3/mu); 
 fprintf('Hohmann TOF = %.4f days\n', TOF/(3600*24))
+mars_angular_displacement = sqrt(mu/a2^3) * TOF;
+phase_angle = pi - mars_angular_displacement;
+% Mars arrival true anomaly (where Mars will be when we arrive)
+f2 = f1 + phase_angle + mars_angular_displacement;
 
-%% trial min energy eqns derived from Lamberts --> min energy 
+%--------------------------------------------------------------------------
+% trial min energy eqns derived from Lamberts --> min energy 
 % same results --> better for non-hohmann for diff cases --> implement
  
 % l = a1+a2; 
@@ -45,10 +48,9 @@ fprintf('Hohmann TOF = %.4f days\n', TOF/(3600*24))
 % e = sqrt(1-p/a);
 % disp(e)
 
-%% 
-
 % True anamoly(func of time) = initial t.a + mean motion * (TOF) 
 % Hohmann --> Mars final t.a  - Earth initial t.a = pi
+% -------------------------------------------------------------------------
 
 phase_angle = pi - sqrt(mu/a2^3)*TOF;
 if (0 <= rad2deg(phase_angle)) && (rad2deg(phase_angle) <=180)
@@ -63,11 +65,16 @@ end
 
 % initial state vectors
 [r1_vec, v1_vec] = orbparm_to_perifocal(a1,e1,f1,mu,I1,0,0);
-state1_vec = [r1_vec; v1_vec];
+state1_vec = [r1_vec; v1_vec]; % Initial orbit initial conditions 
+
 [r2_vec, v2_vec] = orbparm_to_perifocal(a2,e2,f1+phase_angle,mu,I2,0,0);
-state2_vec = [r2_vec; v2_vec];
-vt = sqrt(2*mu/norm(r1_vec) - mu/a_transfer); 
-vt_vec = [-vt*sin(f1);vt*cos(f1);0]; % perifocal
+state2_vec = [r2_vec; v2_vec];% Final orbit initial conditios
+
+Pt = a_transfer*(1-e_transfer^2); 
+vt_vec = [ -sqrt(mu/Pt)*sin(f1); sqrt(mu/Pt)*(e_transfer+cos(f1));0];
+% vt = sqrt(2*mu/norm(r1_vec) - mu/a_transfer); 
+% vt_vec = [-vt*sin(f1);vt*cos(f1);0]; % transformation to shift v vector 
+
 DCM_inc = [ 1 0 0 ; 0 cos(IT) -sin(IT) ; 0 sin(IT) cos(IT)]; %peri to eci
 vt_vec = DCM_inc * vt_vec;
 fprintf('\n vt_vec = [ %.4f %.4f %.4f ]',vt_vec(1), vt_vec(2), vt_vec(3))
@@ -114,37 +121,30 @@ xlabel('X Km')
 ylabel('Y Km')
 zlabel('Z Km')
 axis("equal")
-%% 
+% Functions ---------------------------------------------------------------
 
-function [r_vec, v_vec] = orbparm_to_perifocal(a,e,f,mu,in,raan,aop)
-P = a*(1-e^2); 
-r = P/(1+e*cos(f));
-% perifocal cords (EPH)
-r_vec = [r*cos(f); r*sin(f);0]; 
-v_vec = [-sqrt(mu/P)*sin(f); sqrt(mu/P)*(e+cos(f));0]; 
-% for plane change --> Need DCM's to transform from Perifocal to ECI 
-
-DCM_inc = [ 1 0 0 ; 0 cos(in) -sin(in)  ; 0 sin(in) cos(in) ];
-% DCM_RAAN = [cos(raan) -sin(raan) 0 ; sin(raan) cos(raan) 0 ; 0 0 1]; 
-% DCM_AOP = [cos(aop) -sin(aop) 0 ; sin(aop) cos(aop) 0 ; 0 0 1]; 
-
-% DCM = DCM_AOP * DCM_inc * DCM_RAAN; 
-
-r_vec = DCM_inc * r_vec;
-v_vec = DCM_inc * v_vec;
-
+function [r_vec, v_vec] = orbparm_to_perifocal(a,e,f,mu,inc,raan,aop)
+    P = a*(1-e^2); 
+    r = P/(1+e*cos(f));
+    % perifocal cords (EPH)
+    r_vec = [r*cos(f); r*sin(f);0]; 
+    v_vec = [-sqrt(mu/P)*sin(f); sqrt(mu/P)*(e+cos(f));0]; 
+    % for plane change --> Need DCM's to transform from Perifocal to ECI 
+    % Rotation matrices
+    R1 = [cos(raan), -sin(raan), 0; sin(raan),  cos(raan), 0; 0,0,1];
+    R2 = [1, 0,0;0, cos(inc), -sin(inc); 0, sin(inc), cos(inc)]; 
+    R3 = [cos(aop), -sin(aop), 0; sin(aop),  cos(aop), 0; 0,0,1]; 
+    % Complete transformation matrix from perifocal to ECI
+    DCM = R1 * R2 * R3;
+    % Transform to ECI
+    r_vec = DCM * r_vec;
+    v_vec = DCM * v_vec;
 end
 
 function Xdot = statespace(~,mu,X)
-x = X(1); 
-y = X(2); 
-z = X(3);
-vx = X(4); 
-vy = X(5); 
-vz = X(6);
-r = sqrt(x^2 + y^2 +z^2); 
-ax = -mu/r^3 * x; 
-ay = -mu/r^3 * y; 
-az = -mu/r^3 * z;
-Xdot = [vx;vy;vz;ax;ay;az];
+    r_vec = X(1:3);
+    v_vec = X(4:6);
+    r = norm(r_vec);
+    a_vec = -mu / r^3 * r_vec;
+    Xdot = [v_vec; a_vec];
 end

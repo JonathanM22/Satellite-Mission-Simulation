@@ -87,7 +87,7 @@ df_test = rad2deg(acos(dot(r1_eph, r2_eph) / (r1*r2_1)))
 
 r2 = r2_1;
 l = r1+r2; 
-m = r1*r2*(1+cos(df));
+m = r1*r2*(1+cos(df))py;
 k = r1*r2*(1-cos(df)); 
 a_transfer = 1/4*(r1+r2+sqrt(r1^2+r2^2-2*r1*r2*cos(df))); 
 p = ( 2*a_transfer*k*l -k*m )/( 2*a_transfer*l^2 - 4*a_transfer*m); 

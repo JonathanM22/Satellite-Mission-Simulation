@@ -1,126 +1,122 @@
+from orbit import *
 import numpy as np
-import matplotlib.pyplot as plt
 from scipy.integrate import ode
-
+from scipy import optimize
+import matplotlib.pyplot as plt
 
 # Constants
 # ALL constants are in SI UNITS! (meters, seconds, etc.)
-earth_rad = 6.371 * 10**6
-au = 149597870.691
-sun_mu = 1.327 * 10**20
-earth_mu = 3.956 * 10**14
+# Also for formattng constants are ALL_CAPS
+EARTH_RAD = 6.371 * 10**6
+AU = 1.496 * 10**11
+SUN_MU = 1.327 * 10**20
+EARTH_MU = 3.956 * 10**144
 
 
-class Orbit:
-    def __init__(self, mu, a=None, e=None, f0=None, inc=None, raan=None, aop=None):
-        self.a = a
-        self.e = e
-        try:
-            self.f0 = np.deg2rad(f0)  # type: ignore
-            self.inc = np.deg2rad(inc)  # type: ignore
-            self.raan = np.deg2rad(raan)  # type: ignore
-            self.aop = np.deg2rad(aop)  # type: ignore
-        except:
-            pass
-        self.mu = mu
-        self.energy = None
-        self.p = None
-        self.h = None
-        self.e_hat = None
+# Use Table 1 https://ssd.jpl.nasa.gov/planets/approx_pos.html
+earth = Orbit(a=AU,
+              e=0.0167,
+              inc=0,
+              raan=0,
+              aop=102.9,
+              mu=SUN_MU)
 
-    def propogate(self, r, v, tspan, dt):
-        n_steps = int(np.ceil(tspan/dt))
-        ys = np.zeros((n_steps, 6))
-        ts = np.zeros((n_steps, 1))
+mars = Orbit(a=1.523*AU,
+             e=0.093,
+             inc=1.849,
+             raan=49.5,
+             aop=-23.9,
+             mu=SUN_MU)
 
-        # Intial condition of solver
-        y0 = np.concatenate((r, v))
-        ys[0] = y0
-        step = 1
+transfer = Orbit(mu=SUN_MU)
 
-        # Intiate Solver
-        solver = ode(y_dot)
-        solver.set_integrator('lsoda')
-        solver.set_initial_value(y0, 0)
-        solver.set_f_params(self.mu)
+# Set Up r1 and r2 & TOF
+earth_f1 = 0
+mars_f1 = 0
+TOF = 150*86400
 
-        while solver.successful and step < n_steps:
-            solver.integrate(solver.t+dt)
-            ts[step] = solver.t
-            ys[step] = solver.y
-            step += 1
+r1 = earth.r_at_true_anomaly(earth_f1)
+earth.p = earth.calc_p()
+r1_pqw, v1_pqw = orb_2_pqw(r1, earth_f1, earth.e, earth.p, earth.mu)
+r1_eci, v1_eci = perif_2_eci(r1_pqw, v1_pqw, earth.inc, earth.raan, earth.aop)
 
-        rs = ys[:, :3]
-        vs = ys[:4, :]
+r2 = mars.r_at_true_anomaly(mars_f1)
+mars.p = mars.calc_p()
+r2_pqw, v2_pqw = orb_2_pqw(r1, mars_f1, mars.e, mars.p, mars.mu)
+r2_eci, v2_eci = perif_2_eci(r2_pqw, v2_pqw, mars.inc, mars.raan, mars.aop)
 
-        return (rs, vs)
+delta_f = np.arccos((np.dot(r1_eci, r2_eci)) / (r1*r2))
+# delta_f = 2*np.pi - delta_f
 
+print(f'\ndelta f: {np.rad2deg(delta_f)}\n')
 
-def orbelm_2_pqw(r, f, e, p, mu):
+"""
+Override vars to mimc 458 class example "A550_03_17_25.pdf"
+"""
+# r1 = 1
+# r2 = 0.72
+# delta_f = np.deg2rad(60)
+# TOF = 150/365
+# transfer.mu = 4*(np.pi**2)
 
-    r_pqw = np.array([r*np.cos(f), r*np.sin(f), 0])
-    v_pqw = np.array(
-        [-np.sqrt(mu/p)*np.sin(f), np.sqrt(mu/p)*(e + np.cos(f)), 0])
+# Calculate t_parab
+c = np.sqrt(r1**2 + r2**2 - 2*r1*r2*np.cos(delta_f))
+s = (r1 + r2 + c) / 2
 
-    return r_pqw, v_pqw
+if 0 <= delta_f < np.pi:
+    t_parab = (1/3) * np.sqrt(2/transfer.mu) * (s**(3/2) - ((s-c)**(3/2)))
+elif np.pi <= delta_f < 2*np.pi:
+    t_parab = (1/3) * np.sqrt(2/transfer.mu) * (s**(3/2) + ((s-c)**(3/2)))
 
+if TOF > t_parab:  # type:ignore
+    print("elliptical solution")
+else:
+    print('hyperbolic solution')
 
-def perif_2_eci(r_pqw, v_pqw, inc, raan, aop):
-    # Rotation matrices
-    R1 = np.array([  # Third axis rotation about raan
-        [np.cos(raan), -np.sin(raan), 0],
-        [np.sin(raan),  np.cos(raan), 0],
-        [0,             0,            1]
-    ])
-    R2 = np.array([  # First axis rotation about inc
-        [1, 0,              0],
-        [0, np.cos(inc), -np.sin(inc)],
-        [0, np.sin(inc),  np.cos(inc)]
-    ])
-    R3 = np.array([  # Third axis rotation about aop
-        [np.cos(aop), -np.sin(aop), 0],
-        [np.sin(aop),  np.cos(aop), 0],
-        [0,            0,           1]
-    ])
-    perif_2_eci_DCM = R1 @ R2 @ R3
-    r_eci = perif_2_eci_DCM @ r_pqw
-    v_eci = perif_2_eci_DCM @ v_pqw
+# Calculate minumum transfer
+a_m = s/2
+alpha_m = np.pi
+if 0 <= delta_f < np.pi:
+    beta_m = 2*np.arcsin(np.sqrt((s-c)/s))
+elif np.pi <= delta_f < 2*np.pi:
+    beta_m = -2*np.arcsin(np.sqrt((s-c)/s))
 
-    return r_eci, v_eci
+tm = np.sqrt((s**3)/(8 * transfer.mu)) * \
+    (np.pi - beta_m + np.sin(beta_m))  # type:ignore
 
+# Define alpha and beta
+if TOF <= tm:
+    def alpha(a): return 2*np.arcsin(np.sqrt((s/(2*a))))
+elif TOF > tm:
+    def alpha(a): return 2*np.pi - 2*np.arcsin(np.sqrt((s/(2*a))))
 
-def y_dot(t, y, mu):
-    # print(y)
-    rx, ry, rz, vx, vy, vz = y  # Deconstruct State to get r_vec
-    r = np.array([rx, ry, rz])
-    r_norm = np.linalg.norm(r)
-    ax, ay, az = -r*mu/r_norm**3  # Two body Problem ODE
-    return [vx, vy, vz, ax, ay, az]
+if 0 <= delta_f < np.pi:
+    def beta(a): return 2*np.arcsin(np.sqrt((s-c)/(2*a)))
+elif np.pi <= delta_f < 2*np.pi:
+    def beta(a): return -2*np.arcsin(np.sqrt((s-c)/(2*a)))
+
+# Solve for a
 
 
-# Input degrees
-parking = Orbit(a=au,
-                e=0.174,
-                f0=0,
-                inc=1,
-                raan=200,
-                aop=37,
-                mu=sun_mu)
+def lambert_eq(a): return ((np.sqrt(a**3)) * (alpha(a) - np.sin(alpha(a)
+                                                                ) - beta(a) + np.sin(beta(a)))) - ((np.sqrt(transfer.mu))*TOF)
 
-target = Orbit(a=1.54*au,
-               e=0.4,
-               f0=0,
-               inc=50,
-               raan=40,
-               aop=25,
-               mu=sun_mu)
 
-transfer = Orbit(mu=sun_mu)
+transfer.a = optimize.brentq(lambert_eq, a_m, 5*AU)
+print(f'lamber a {transfer.a}')
 
+
+transfer.p = (((4*transfer.a)*(s-r1)*(s-r2))/(c**2)) * \
+    (np.sin((alpha(transfer.a) + beta(transfer.a))/2)**2)  # type:ignore
+transfer.e = np.sqrt(1 - (transfer.p/transfer.a))
+
+print(5)
+
+"""
 # Calculate r0 & v0 off f0
 parking.p = (parking.a*(1-parking.e**2))  # type: ignore
 parking_r0 = (parking.p) / (1 + parking.e*np.cos(parking.f0))
-parking_r0_pqw, parking_v0_pqw = orbelm_2_pqw(
+parking_r0_pqw, parking_v0_pqw = orb_2_pqw(
     parking_r0, parking.f0, parking.e, parking.p, parking.mu)
 parking_r0_eci, parking_v0_eci = perif_2_eci(
     parking_r0_pqw, parking_v0_pqw, parking.inc, parking.raan, parking.aop)
@@ -132,7 +128,7 @@ parking_f1 = np.deg2rad(360) - parking.aop
 # parking_f1 = 90 + parking.aop + parking.raan
 # print(np.rad2deg(parking_f1))
 parking_r1 = (parking.p) / (1 + parking.e*np.cos(parking_f1))
-parking_r1_pqw, parking_v1_pqw = orbelm_2_pqw(
+parking_r1_pqw, parking_v1_pqw = orb_2_pqw(
     parking_r1, parking_f1, parking.e, parking.p, parking.mu)
 parking_r1_eci, parking_v1_eci = perif_2_eci(
     parking_r1_pqw, parking_v1_pqw, parking.inc, parking.raan, parking.aop)
@@ -143,7 +139,7 @@ print(f'parking r1 = {parking_r1_eci}')
 # Calculate r0 & v0 off f0
 target.p = (target.a*(1-target.e**2))  # type: ignore
 target_r0 = (target.p) / (1 + target.e*np.cos(target.f0))
-target_r0_pqw, target_v0_pqw = orbelm_2_pqw(
+target_r0_pqw, target_v0_pqw = orb_2_pqw(
     target_r0, target.f0, target.e, target.p, target.mu)
 target_r0_eci, target_v0_eci = perif_2_eci(
     target_r0_pqw, target_v0_pqw, target.inc, target.raan, target.aop)
@@ -155,7 +151,7 @@ target_f1 = np.deg2rad(360) - target.aop
 target_f1 = 90 + target.aop + target.raan
 # print(np.rad2deg(parking_f1))
 target_r1 = (target.p) / (1 + target.e*np.cos(target_f1))
-target_r1_pqw, target_v1_pqw = orbelm_2_pqw(
+target_r1_pqw, target_v1_pqw = orb_2_pqw(
     target_r1, target_f1, target.e, target.p, target.mu)
 target_r1_eci, target_v1_eci = perif_2_eci(
     target_r1_pqw, target_v1_pqw, target.inc, target.raan, target.aop)
@@ -203,74 +199,4 @@ plt.show()
 
 plt.show()
 
-"""
-# -----
-target.p = (target.a*(1-target.e**2))  # type: ignore
-target.f0 = np.deg2rad(90)-target.aop
-# Forcing r2 to be on line of nodes +/- 90deg
-target_r2 = (target.p) / (1 + target.e*np.cos(target.f0))
-
-# Intial r1 & r2 in ECI frames
-parking_r1_pqw, parking_v1_pqw = orbelm_2_pqw(
-    parking_r1, parking.f0, parking.e, parking.p, parking.mu)
-parking_r1_eci, parking_v1_eci = perif_2_eci(
-    parking_r1_pqw, parking_v1_pqw, target.inc, target.raan, target.aop)
-
-target_r2_pqw, target_v2_pqw = orbelm_2_pqw(
-    target_r2, target.f0, target.e, target.p, target.mu)
-target_r2_eci, target_v2_eci = perif_2_eci(
-    target_r2_pqw, target_v2_pqw, target.inc, target.raan, target.aop)
-
-# Check for hohmann
-print(f"r1 = {parking_r1_eci}")
-print(f"r2 = {target_r2_eci}")
-"""
-
-# -----------------
-
-
-"""
-test.p = (test.a*(1-test.e**2))  # type: ignore
-test_r1 = (test.p) / (1 + test.e*np.cos(test.f0))
-
-r_pqw, v_pqw = orbelm_2_pqw(test_r1, test.f0,
-                            test.e, test.p, test.mu)
-
-test_r0, test_v0 = perif_2_eci(r_pqw, v_pqw, test.inc,
-                               test.raan, test.aop)
-
-# Intitalize Arrays for Solver
-tspan = (2*np.pi)*np.sqrt(test.a**3/test.mu)
-# print(tspan)
-dt = 100
-n_steps = int(np.ceil(tspan/dt))
-ys = np.zeros((n_steps, 6))
-ts = np.zeros((n_steps, 1))
-
-# Intial condition of solver
-test_y0 = np.concatenate((test_r0, test_v0))
-ys[0] = test_y0
-step = 1
-
-# Intiate Solver
-solver = ode(y_dot)
-solver.set_integrator('lsoda')
-solver.set_initial_value(test_y0, 0)
-solver.set_f_params(earth_mu)
-
-
-while solver.successful and step < n_steps:
-    solver.integrate(solver.t+dt)
-    ts[step] = solver.t
-    ys[step] = solver.y
-    step += 1
-
-rs = ys[:, :3]
-
-# print(rs)
-
-# fig = plt.figure(figsize(18, 6))
-ax = plt.figure().add_subplot(projection='3d')
-ax.plot(rs[:, 0], rs[:, 1], rs[:, 2])
-plt.show()
 """

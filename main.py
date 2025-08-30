@@ -10,13 +10,12 @@ import matplotlib.pyplot as plt
 EARTH_RAD = 6.371 * 10**6
 AU = 1.496 * 10**11
 SUN_MU = 1.327 * 10**20
-EARTH_MU = 3.956 * 10**144
 
 
 # Use Table 1 https://ssd.jpl.nasa.gov/planets/approx_pos.html
 earth = Orbit(a=AU,
               e=0.0167,
-              inc=0,
+              inc=20,
               raan=0,
               aop=102.9,
               mu=SUN_MU)
@@ -39,78 +38,48 @@ r1 = earth.r_at_true_anomaly(earth_f1)
 earth.p = earth.calc_p()
 r1_pqw, v1_pqw = orb_2_pqw(r1, earth_f1, earth.e, earth.p, earth.mu)
 r1_eci, v1_eci = perif_2_eci(r1_pqw, v1_pqw, earth.inc, earth.raan, earth.aop)
+h = np.cross(r1_eci, v1_eci)
+hnorm = np.linalg.norm(h)
+inc1 = np.arccos(h[2] / hnorm)
+
 
 r2 = mars.r_at_true_anomaly(mars_f1)
 mars.p = mars.calc_p()
-r2_pqw, v2_pqw = orb_2_pqw(r1, mars_f1, mars.e, mars.p, mars.mu)
+r2_pqw, v2_pqw = orb_2_pqw(r2, mars_f1, mars.e, mars.p, mars.mu)
 r2_eci, v2_eci = perif_2_eci(r2_pqw, v2_pqw, mars.inc, mars.raan, mars.aop)
-
-delta_f = np.arccos((np.dot(r1_eci, r2_eci)) / (r1*r2))
-# delta_f = 2*np.pi - delta_f
-
-print(f'\ndelta f: {np.rad2deg(delta_f)}\n')
-
-"""
-Override vars to mimc 458 class example "A550_03_17_25.pdf"
-"""
-# r1 = 1
-# r2 = 0.72
-# delta_f = np.deg2rad(60)
-# TOF = 150/365
-# transfer.mu = 4*(np.pi**2)
-
-# Calculate t_parab
-c = np.sqrt(r1**2 + r2**2 - 2*r1*r2*np.cos(delta_f))
-s = (r1 + r2 + c) / 2
-
-if 0 <= delta_f < np.pi:
-    t_parab = (1/3) * np.sqrt(2/transfer.mu) * (s**(3/2) - ((s-c)**(3/2)))
-elif np.pi <= delta_f < 2*np.pi:
-    t_parab = (1/3) * np.sqrt(2/transfer.mu) * (s**(3/2) + ((s-c)**(3/2)))
-
-if TOF > t_parab:  # type:ignore
-    print("elliptical solution")
-else:
-    print('hyperbolic solution')
-
-# Calculate minumum transfer
-a_m = s/2
-alpha_m = np.pi
-if 0 <= delta_f < np.pi:
-    beta_m = 2*np.arcsin(np.sqrt((s-c)/s))
-elif np.pi <= delta_f < 2*np.pi:
-    beta_m = -2*np.arcsin(np.sqrt((s-c)/s))
-
-tm = np.sqrt((s**3)/(8 * transfer.mu)) * \
-    (np.pi - beta_m + np.sin(beta_m))  # type:ignore
-
-# Define alpha and beta
-if TOF <= tm:
-    def alpha(a): return 2*np.arcsin(np.sqrt((s/(2*a))))
-elif TOF > tm:
-    def alpha(a): return 2*np.pi - 2*np.arcsin(np.sqrt((s/(2*a))))
-
-if 0 <= delta_f < np.pi:
-    def beta(a): return 2*np.arcsin(np.sqrt((s-c)/(2*a)))
-elif np.pi <= delta_f < 2*np.pi:
-    def beta(a): return -2*np.arcsin(np.sqrt((s-c)/(2*a)))
-
-# Solve for a
+h = np.cross(r2_eci, v2_eci)
+hnorm = np.linalg.norm(h)
+inc2 = np.arccos(h[2] / hnorm)
 
 
-def lambert_eq(a): return ((np.sqrt(a**3)) * (alpha(a) - np.sin(alpha(a)
-                                                                ) - beta(a) + np.sin(beta(a)))) - ((np.sqrt(transfer.mu))*TOF)
+# Solve for transfer orbit via lamberts
+transfer.a, transfer.p, transfer.e, v1_transfer, v2_transfer = lambert_solver(
+    r1_eci, r2_eci, TOF, transfer.mu)  # type:ignore
 
+"""- - - - - - - - - - - - - - - -PLOTTING- - - - - - - - - - - - - - - -"""
+earth_rs, earth_vs = propogate_orbit(
+    r1_eci, v1_eci, earth.mu, tspan=earth.period(), dt=1000)
+mars_rs, mars_vs = propogate_orbit(
+    r2_eci, v2_eci, mars.mu, tspan=mars.period(), dt=100)
 
-transfer.a = optimize.brentq(lambert_eq, a_m, 5*AU)
-print(f'lamber a {transfer.a}')
+# fig = plt.figure(figsize(18, 6))
+ax = plt.figure().add_subplot(projection='3d')
+xx, yy = np.meshgrid(np.linspace(-2*AU, 2*AU, 2), np.linspace(-2*AU, 2*AU, 2))
+zz = np.zeros_like(xx)
+ax.plot_surface(xx, yy, zz, alpha=0.1, color='gray')
 
+ax.plot(earth_rs[:, 0], earth_rs[:, 1], earth_rs[:, 2], color='green')
+# ax.plot(mars_rs[:, 0], mars_rs[:, 1], mars_rs[:, 2], color='red')
 
-transfer.p = (((4*transfer.a)*(s-r1)*(s-r2))/(c**2)) * \
-    (np.sin((alpha(transfer.a) + beta(transfer.a))/2)**2)  # type:ignore
-transfer.e = np.sqrt(1 - (transfer.p/transfer.a))
+# ax.scatter(earth_rs[0], earth_rs[1], earth_rs[1], color='green', s=50, marker='o', edgecolor='k', label="pf1")
 
-print(5)
+# formatting
+ax.set_xlabel("X [m]")
+ax.set_ylabel("Y [m]")
+ax.set_zlabel("Z [m]")
+ax.legend()
+plt.show()
+
 
 """
 # Calculate r0 & v0 off f0

@@ -1,9 +1,11 @@
 import numpy as np
 from scipy.integrate import ode
+from scipy import optimize
 
 # Define variables to be imported
 # when module is imported
-__all__ = ['Orbit', 'orb_2_pqw', 'perif_2_eci', 'propogate_orbit']
+__all__ = ['Orbit', 'orb_2_pqw', 'perif_2_eci',
+           'propogate_orbit', 'lambert_solver']
 
 
 class Orbit:
@@ -69,7 +71,79 @@ class Orbit:
                 "Orbit has period cannot be calculated. Check a or mu")
 
 
-def propogate_orbit(self, r, v, tspan, dt):
+def lambert_solver(r1_vec, r2_vec, tof, mu, desired_path='short'):
+    """
+    Returns a, e, p or the transfer orbit
+    Follows 458 lectures
+    Uses method described in Prussing, John E., and Bruce A. Conway. Orbital Mechanics. Oxford University Press, 2013. 
+    """
+
+    r1 = np.linalg.norm(r1_vec)
+    r2 = np.linalg.norm(r2_vec)
+
+    if desired_path == 'short':
+        delta_f = np.arccos((np.dot(r1_vec, r2_vec)) / (r1*r2))
+    elif desired_path == 'long':
+        delta_f = (2*np.pi) - np.arccos((np.dot(r1_vec, r2_vec)) / (r1*r2))
+
+    # Calc chord and space triangel perimeter
+    c = np.sqrt(r1**2 + r2**2 - 2*r1*r2*np.cos(delta_f))  # type:ignore
+    s = (r1 + r2 + c) / 2
+
+    # Calc t_parab
+    if 0 <= delta_f < np.pi:  # type:ignore
+        t_parab = (1/3) * np.sqrt(2/mu) * (s**(3/2) - ((s-c)**(3/2)))
+    elif np.pi <= delta_f < 2*np.pi:  # type:ignore
+        t_parab = (1/3) * np.sqrt(2/mu) * (s**(3/2) + ((s-c)**(3/2)))
+
+    if tof > t_parab:  # type:ignore
+        # print("elliptical solution")
+        pass
+    else:
+        # print('hyperbolic solution')
+        return None
+
+    # Calculate minumum transfer
+    a_m = s/2
+    alpha_m = np.pi
+    if 0 <= delta_f < np.pi:  # type:ignore
+        beta_m = 2*np.arcsin(np.sqrt((s-c)/s))
+    elif np.pi <= delta_f < 2*np.pi:  # type:ignore
+        beta_m = -2*np.arcsin(np.sqrt((s-c)/s))
+
+    tm = np.sqrt((s**3)/(8 * mu)) * \
+        (np.pi - beta_m + np.sin(beta_m))  # type:ignore
+
+    # Define alpha and beta
+    if tof <= tm:
+        def alpha(a): return 2*np.arcsin(np.sqrt((s/(2*a))))
+    elif tof > tm:
+        def alpha(a): return 2*np.pi - 2*np.arcsin(np.sqrt((s/(2*a))))
+
+    if 0 <= delta_f < np.pi:  # type:ignore
+        def beta(a): return 2*np.arcsin(np.sqrt((s-c)/(2*a)))
+    elif np.pi <= delta_f < 2*np.pi:  # type:ignore
+        def beta(a): return -2*np.arcsin(np.sqrt((s-c)/(2*a)))
+
+    # Solve for a, p and e
+    def lambert_eq(a): return ((np.sqrt(a**3)) * (alpha(a) - np.sin(alpha(a)
+                                                                    ) - beta(a) + np.sin(beta(a)))) - ((np.sqrt(mu))*tof)
+    a = optimize.brentq(lambert_eq, a_m, a_m*100)
+    p = (((4*a)*(s-r1)*(s-r2))/(c**2)) * \
+        (np.sin((alpha(a) + beta(a))/2)**2)  # type:ignore
+    e = np.sqrt(1 - (p/a))
+
+    # Calculate v1 @ r1 and v2 @ r2
+    A = np.sqrt(mu/(4*a))*(1/np.tan(alpha(a)/2))  # type:ignore
+    B = np.sqrt(mu/(4*a))*(1/np.tan(beta(a)/2))  # type:ignore
+
+    v1 = np.array([(B+A), (B-A)])
+    v2 = np.array([(B+A), -(B-A)])
+
+    return a, p, e, v1, v2
+
+
+def propogate_orbit(r, v, mu, tspan, dt):
     """
     Propgates orbit based on given r and v vectores. 
     Returns series of position vectors 'rs'
@@ -88,24 +162,28 @@ def propogate_orbit(self, r, v, tspan, dt):
     solver = ode(y_dot)
     solver.set_integrator('lsoda')
     solver.set_initial_value(y0, 0)
-    solver.set_f_params(self.mu)
+    solver.set_f_params(mu)
 
-    while solver.successful and step < n_steps:
+    while solver.successful() and step < n_steps:
         solver.integrate(solver.t+dt)
         ts[step] = solver.t
         ys[step] = solver.y
         step += 1
 
     rs = ys[:, :3]
-    vs = ys[:, 3:]
+    vs = 0
 
     return (rs, vs)
 
 
-def orb_2_pqw(r, f, e, p, mu):
+def orb_2_pqw(r, f, e, p, mu, degrees=True):
     """
     Transforms orbital frame to perifocal frame
     """
+    if degrees:
+        f = np.deg2rad(f)
+    else:
+        pass
     r_pqw = np.array([r*np.cos(f), r*np.sin(f), 0])
     v_pqw = np.array(
         [-np.sqrt(mu/p)*np.sin(f), np.sqrt(mu/p)*(e + np.cos(f)), 0])

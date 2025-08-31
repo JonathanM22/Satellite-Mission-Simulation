@@ -69,35 +69,22 @@ def y_dot(t, y, mu):
     return [vx, vy, vz, ax, ay, az]
 
 
-parking = Orbit(a=au,
-                e=0,
-                f0=0,
-                inc=0,
-                raan=0,
-                aop=0,
-                mu=sun_mu)
-
-target = Orbit(a=1.54*au,
-               e=0,
-               f0=0,
-               inc=0,
-               raan=0,
-               aop=0,
-               mu=sun_mu)
-
-transfer = Orbit(mu=sun_mu)
-
-# Point 1 -> Intial point at test orbit
-
-
 test = Orbit(a=26564*1000,
              e=0.7411,
              f0=np.deg2rad(30),
-             inc=np.deg2rad(63.4),
+             inc=np.deg2rad(0),
              raan=np.deg2rad(200),
              aop=np.deg2rad(-90),
              mu=earth_mu)
 
+test2 = Orbit(a=26564*1000,
+              e=0.7411,
+              f0=np.deg2rad(30),
+              inc=np.deg2rad(45),
+              raan=np.deg2rad(200),
+              aop=np.deg2rad(-90),
+              mu=earth_mu)
+"""- - - - - - - - - - - - - - - -Test Orbit 1- - - - - - - - - - - - - - - -"""
 test.p = (test.a*(1-test.e**2))  # type: ignore
 test_r1 = (test.p) / (1 + test.e*np.cos(test.f0))
 
@@ -135,9 +122,53 @@ while solver.successful and step < n_steps:
 
 rs = ys[:, :3]
 
-print(rs)
+"""- - - - - - - - - - - - - - - -Test Orbit 2- - - - - - - - - - - - - - - -"""
+test2.p = (test2.a*(1-test2.e**2))  # type: ignore
+test2_r1 = (test2.p) / (1 + test2.e*np.cos(test2.f0))
 
+r_pqw, v_pqw = orbelm_2_pqw(test2_r1, test2.f0,
+                            test2.e, test2.p, test2.mu)
+
+test2_r0, test2_v0 = perif_2_eci(r_pqw, v_pqw, test2.inc,
+                                 test2.raan, test2.aop)
+
+# Intitalize Arrays for Solver
+tspan = (2*np.pi)*np.sqrt(test2.a**3/test2.mu)
+print(tspan)
+dt = 100
+n_steps = int(np.ceil(tspan/dt))
+ys = np.zeros((n_steps, 6))
+ts = np.zeros((n_steps, 1))
+
+# Intial condition of solver
+test2_y0 = np.concatenate((test2_r0, test2_v0))
+ys[0] = test2_y0
+step = 1
+
+# Intiate Solver
+solver = ode(y_dot)
+solver.set_integrator('lsoda')
+solver.set_initial_value(test2_y0, 0)
+solver.set_f_params(earth_mu)
+
+
+while solver.successful and step < n_steps:
+    solver.integrate(solver.t+dt)
+    ts[step] = solver.t
+    ys[step] = solver.y
+    step += 1
+
+rs2 = ys[:, :3]
+
+
+"""- - - - - - - - - - - - - - - -PLOTTING- - - - - - - - - - - - - - - -"""
 # fig = plt.figure(figsize(18, 6))
 ax = plt.figure().add_subplot(projection='3d')
 ax.plot(rs[:, 0], rs[:, 1], rs[:, 2])
+ax.plot(rs2[:, 0], rs2[:, 1], rs2[:, 2])
+ax.set_aspect('equal')
 plt.show()
+
+print(rs1[:5])
+print('/n')
+print(rs2[:5])

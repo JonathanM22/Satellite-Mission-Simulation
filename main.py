@@ -27,21 +27,35 @@ mars = Orbit(a=1.523*AU,
              aop=-23.9,
              mu=SUN_MU)
 
+# Use Table 1 https://ssd.jpl.nasa.gov/planets/approx_pos.html
+earth = Orbit(a=AU,
+              e=0.0167,
+              inc=20,
+              raan=30,
+              aop=102.9,
+              mu=SUN_MU)
+
+mars = Orbit(a=1.523*AU,
+             e=0.093,
+             inc=-30,
+             raan=-78,
+             aop=-23.9,
+             mu=SUN_MU)
+
 transfer = Orbit(mu=SUN_MU)
 
 # Set Up r1 and r2 & TOF
-earth_f1 = 0
-mars_f1 = 0
+earth_f1 = 68
+mars_f1 = 57
 TOF = 150*86400
 
 r1 = earth.r_at_true_anomaly(earth_f1)
 earth.p = earth.calc_p()
 r1_pqw, v1_pqw = orb_2_pqw(r1, earth_f1, earth.e, earth.p, earth.mu)
 r1_eci, v1_eci = perif_2_eci(r1_pqw, v1_pqw, earth.inc, earth.raan, earth.aop)
-h = np.cross(r1_eci, v1_eci)
-hnorm = np.linalg.norm(h)
-inc1 = np.arccos(h[2] / hnorm)
-
+earth.h = np.cross(r1_eci, v1_eci)
+hnorm = np.linalg.norm(earth.h)
+inc1 = np.arccos(earth.h[2] / hnorm)
 
 r2 = mars.r_at_true_anomaly(mars_f1)
 mars.p = mars.calc_p()
@@ -51,34 +65,43 @@ h = np.cross(r2_eci, v2_eci)
 hnorm = np.linalg.norm(h)
 inc2 = np.arccos(h[2] / hnorm)
 
-
 # Solve for transfer orbit via lamberts
-transfer.a, transfer.p, transfer.e, v1_transfer, v2_transfer = lambert_solver(
+transfer.a, transfer.p, transfer.e, transfer_v1, transfer_v2 = lambert_solver(
     r1_eci, r2_eci, TOF, transfer.mu)  # type:ignore
 
-"""- - - - - - - - - - - - - - - -PLOTTING- - - - - - - - - - - - - - - -"""
-earth_rs, earth_vs = propogate_orbit(
-    r1_eci, v1_eci, earth.mu, tspan=earth.period(), dt=1000)
-mars_rs, mars_vs = propogate_orbit(
-    r2_eci, v2_eci, mars.mu, tspan=mars.period(), dt=100)
+transfer.energy = transfer.calc_energy()
 
-# fig = plt.figure(figsize(18, 6))
-ax = plt.figure().add_subplot(projection='3d')
-xx, yy = np.meshgrid(np.linspace(-2*AU, 2*AU, 2), np.linspace(-2*AU, 2*AU, 2))
-zz = np.zeros_like(xx)
-ax.plot_surface(xx, yy, zz, alpha=0.1, color='gray')
+transfer_r1 = r1_eci
 
-ax.plot(earth_rs[:, 0], earth_rs[:, 1], earth_rs[:, 2], color='green')
-# ax.plot(mars_rs[:, 0], mars_rs[:, 1], mars_rs[:, 2], color='red')
+v1_t = np.sqrt(2*(transfer.energy + (transfer.mu/np.linalg.norm(transfer_r1))))
 
-# ax.scatter(earth_rs[0], earth_rs[1], earth_rs[1], color='green', s=50, marker='o', edgecolor='k', label="pf1")
+plot = True
+if plot == True:
+    """- - - - - - - - - - - - - - - -PLOTTING- - - - - - - - - - - - - - - -"""
+    earth_rs, earth_vs = propogate_orbit(
+        r1_eci, v1_eci, earth.mu, tspan=earth.period(), dt=86400)
+    mars_rs, mars_vs = propogate_orbit(
+        r2_eci, v2_eci, mars.mu, tspan=mars.period(), dt=86400)
+    transfer_rs, transfer_vs = propogate_orbit(
+        transfer_r1, transfer_v1, transfer.mu, tspan=TOF, dt=86400)
 
-# formatting
-ax.set_xlabel("X [m]")
-ax.set_ylabel("Y [m]")
-ax.set_zlabel("Z [m]")
-ax.legend()
-plt.show()
+    ax = plt.figure().add_subplot(projection='3d')
+    ax.plot(earth_rs[:, 0], earth_rs[:, 1], earth_rs[:, 2], color='green')
+    ax.plot(mars_rs[:, 0], mars_rs[:, 1], mars_rs[:, 2], color='red')
+    ax.plot(transfer_rs[:, 0], transfer_rs[:, 1],
+            transfer_rs[:, 2], color='orange')
+
+    # Add Sun
+    ax.scatter(0, 0, 0,
+               color='yellow', s=25, marker='o', edgecolor='k', label="SUN")
+
+    # formatting
+    ax.set_aspect('equal')
+    ax.set_xlabel("X [m]")
+    ax.set_ylabel("Y [m]")
+    ax.set_zlabel("Z [m]")
+    ax.legend()
+    plt.show()
 
 
 """

@@ -21,8 +21,9 @@ class Orbit:
             raan is not None and degrees) else raan
         self.aop = np.deg2rad(aop) if (aop is not None and degrees) else aop
         self.mu = mu
-        self.h = None
+        self.h = np.zeros(2)
         self.p = None
+        self.energy = None
 
     def r_at_true_anomaly(self, f, degrees=True):
         """
@@ -36,15 +37,18 @@ class Orbit:
             raise ValueError(
                 "r_at_true_anomaly cannot be calculated. Check a, e or f")
 
-    def energy(self):
+    def calc_energy(self):
         """
         Returns orbit energy 
         """
-        try:
-            return self.a * (1 - self.e**2)  # type:ignore
-        except:
-            raise ValueError(
-                "Orbit energy  cannot be calculated. Check a")
+        if self.energy is not None:
+            return self.energy
+        else:
+            try:
+                return (-self.mu) / (2*self.a)  # type:ignore
+            except:
+                raise ValueError(
+                    "Orbit energy  cannot be calculated. Check a")
 
     def calc_p(self):
         """
@@ -134,11 +138,16 @@ def lambert_solver(r1_vec, r2_vec, tof, mu, desired_path='short'):
     e = np.sqrt(1 - (p/a))
 
     # Calculate v1 @ r1 and v2 @ r2
+    # Calc unit vectors
+    u1 = r1_vec / r1
+    u2 = r2_vec / r2
+    uc = (r2_vec - r1_vec) / c
+
     A = np.sqrt(mu/(4*a))*(1/np.tan(alpha(a)/2))  # type:ignore
     B = np.sqrt(mu/(4*a))*(1/np.tan(beta(a)/2))  # type:ignore
 
-    v1 = np.array([(B+A), (B-A)])
-    v2 = np.array([(B+A), -(B-A)])
+    v1 = (B+A)*uc + (B-A)*u1
+    v2 = (B+A)*uc - (B-A)*u2
 
     return a, p, e, v1, v2
 

@@ -14,16 +14,16 @@ a1  = au;
 e1  = 0;                       % can be non-circular
 f1  = deg2rad(0);                % true anomaly at departure
 T1  = 2*pi*sqrt(a1^3/mu); 
-I1  = deg2rad(60); 
-AOP1  = deg2rad(20);             % argument of periapsis (rad)
+I1  = deg2rad(1); 
+AOP1  = deg2rad(0);             % argument of periapsis (rad)
 RAAN1 = deg2rad(0);              % RAAN (rad)
 
 % --- Arrival Orbit (Mars-like) ---
 a2  = 1.524*au;
 e2  = 0;
 T2  = 2*pi*sqrt(a2^3/mu);
-I2  = deg2rad(60);
-AOP2  = deg2rad(50);
+I2  = deg2rad(1);
+AOP2  = deg2rad(0);
 RAAN2 = deg2rad(0);
 
 % Fun trial for validation

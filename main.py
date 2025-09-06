@@ -15,7 +15,7 @@ SUN_MU = 1.327 * 10**20
 # Use Table 1 https://ssd.jpl.nasa.gov/planets/approx_pos.html
 earth = Orbit(a=AU,
               e=0.0167,
-              inc=20,
+              inc=0,
               raan=0,
               aop=102.9,
               mu=SUN_MU)
@@ -27,53 +27,29 @@ mars = Orbit(a=1.523*AU,
              aop=-23.9,
              mu=SUN_MU)
 
-# Use Table 1 https://ssd.jpl.nasa.gov/planets/approx_pos.html
-earth = Orbit(a=AU,
-              e=0.0167,
-              inc=20,
-              raan=30,
-              aop=102.9,
-              mu=SUN_MU)
-
-mars = Orbit(a=1.523*AU,
-             e=0.093,
-             inc=-30,
-             raan=-78,
-             aop=-23.9,
-             mu=SUN_MU)
-
 transfer = Orbit(mu=SUN_MU)
 
 # Set Up r1 and r2 & TOF
-earth_f1 = 68
-mars_f1 = 57
-TOF = 150*86400
+earth_f1 = 90
+mars_f1 = 0
+TOF = 365*86400
 
 r1 = earth.r_at_true_anomaly(earth_f1)
 earth.p = earth.calc_p()
 r1_pqw, v1_pqw = orb_2_pqw(r1, earth_f1, earth.e, earth.p, earth.mu)
 r1_eci, v1_eci = perif_2_eci(r1_pqw, v1_pqw, earth.inc, earth.raan, earth.aop)
-earth.h = np.cross(r1_eci, v1_eci)
-hnorm = np.linalg.norm(earth.h)
-inc1 = np.arccos(earth.h[2] / hnorm)
 
 r2 = mars.r_at_true_anomaly(mars_f1)
 mars.p = mars.calc_p()
 r2_pqw, v2_pqw = orb_2_pqw(r2, mars_f1, mars.e, mars.p, mars.mu)
 r2_eci, v2_eci = perif_2_eci(r2_pqw, v2_pqw, mars.inc, mars.raan, mars.aop)
-h = np.cross(r2_eci, v2_eci)
-hnorm = np.linalg.norm(h)
-inc2 = np.arccos(h[2] / hnorm)
 
 # Solve for transfer orbit via lamberts
 transfer.a, transfer.p, transfer.e, transfer_v1, transfer_v2 = lambert_solver(
     r1_eci, r2_eci, TOF, transfer.mu)  # type:ignore
 
-transfer.energy = transfer.calc_energy()
-
 transfer_r1 = r1_eci
 
-v1_t = np.sqrt(2*(transfer.energy + (transfer.mu/np.linalg.norm(transfer_r1))))
 
 plot = True
 if plot == True:

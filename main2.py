@@ -1,0 +1,99 @@
+from orbit import *
+import numpy as np
+from scipy.integrate import ode
+from scipy import optimize
+import matplotlib.pyplot as plt
+
+from astropy.time import Time
+from astropy.time import TimeDelta
+from astropy import units as u
+from astropy.coordinates import solar_system_ephemeris
+from astropy.coordinates import get_body_barycentric_posvel
+
+# Constants
+# ALL constants are in SI UNITS! (meters, seconds, etc.)
+# Also for formattng constants are ALL_CAPS
+EARTH_RAD = 6.371 * 10**6
+AU = 1.496 * 10**11
+SUN_MU = 1.327 * 10**20
+
+
+# Use Table 1 https://ssd.jpl.nasa.gov/planets/approx_pos.html
+earth = Orbit(a=1.00000261*AU,
+              e=0.01671123,
+              inc=-0.00001531,
+              raan=0,
+              aop=102.93768193,
+              mu=SUN_MU)
+
+mars = Orbit(a=1.523*AU,
+             e=0.093,
+             inc=1.849,
+             raan=49.5,
+             aop=-23.9,
+             mu=SUN_MU)
+
+transfer = Orbit(mu=SUN_MU)
+
+# Set Up r1 & r2 from jpl ephemeris
+solar_system_ephemeris.set('de432s')  # Ephemeris from 1950 - 2050
+depature_date = Time("2014-09-22 23:22")
+tof = TimeDelta(150, format='jd')
+arrival_date = depature_date + tof
+
+r1_eph, v1_eph = get_body_barycentric_posvel('earth', depature_date)
+r2_eph, v2_eph = get_body_barycentric_posvel('mars', arrival_date)
+r1_mars, v1_mars = get_body_barycentric_posvel('mars', depature_date)
+
+"""
+Need to get sun position and velocity to transform
+baycentric cords to helio-centric
+"""
+# Position of Sun
+r_sun, v_sun = get_body_barycentric_posvel('sun', depature_date)
+
+
+r1 = (r1_eph.xyz - r_sun.xyz).to(u.m).value  # type:ignore
+v1 = (v1_eph.xyz - v_sun.xyz).to(u.m/u.s).value  # type:ignore
+
+r2 = (r2_eph.xyz - r_sun.xyz).to(u.m).value  # type:ignore
+v2 = (v2_eph.xyz - v_sun.xyz).to(u.m/u.s).value  # type:ignore
+
+r1_mars = (r1_mars.xyz - r_sun.xyz).to(u.m).value  # type:ignore
+v1_mars = (v1_mars.xyz - v_sun.xyz).to(u.m/u.s).value  # type:ignore
+
+# Solve for transfer orbit via lamberts
+transfer.a, transfer.p, transfer.e, transfer_v1, transfer_v2 = lambert_solver(
+    r1, r2, (tof.sec), transfer.mu, desired_path='short')  # type:ignore
+
+transfer_r1 = r1
+
+plot = True
+if plot == True:
+    """- - - - - - - - - - - - - - - -PLOTTING- - - - - - - - - - - - - - - -"""
+    earth_rs, earth_vs = propogate_orbit(
+        r1, v1, earth.mu, tspan=tof.sec, dt=86400)
+    mars_rs, mars_vs = propogate_orbit(
+        r1_mars, v1_mars, mars.mu, tspan=tof.sec, dt=86400)
+    transfer_rs, transfer_vs = propogate_orbit(
+        transfer_r1, transfer_v1, transfer.mu, tspan=tof.sec, dt=86400)
+
+    ax = plt.figure().add_subplot(projection='3d')
+    ax.plot(earth_rs[:, 0], earth_rs[:, 1],
+            earth_rs[:, 2], color='green', label='earth')
+    ax.plot(mars_rs[:, 0], mars_rs[:, 1],
+            mars_rs[:, 2], color='red', label='mars')
+    ax.plot(transfer_rs[:, 0], transfer_rs[:, 1],
+            transfer_rs[:, 2], color='orange', label='transfer')
+
+    # Add Sun
+    ax.scatter(r_sun.xyz.value[0], r_sun.xyz.value[1], r_sun.xyz.value[2],
+               color='yellow', s=15, marker='o', edgecolor='k', label="SUN")
+
+    # formatting
+    ax.set_aspect('equal')
+    ax.set_xlabel("X [m]")
+    ax.set_ylabel("Y [m]")
+    ax.set_zlabel("Z [m]")
+    ax.legend()
+    plt.show()

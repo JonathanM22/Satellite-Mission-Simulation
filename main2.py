@@ -1,3 +1,6 @@
+"""
+main2.py Uses JPL ephemeris data as r1 and r2 to calculate the the lamberst problem 
+"""
 from orbit import *
 import numpy as np
 from scipy.integrate import ode
@@ -38,7 +41,7 @@ transfer = Orbit(mu=SUN_MU)
 # Set Up r1 & r2 from jpl ephemeris
 solar_system_ephemeris.set('de432s')  # Ephemeris from 1950 - 2050
 depature_date = Time("2014-09-22 23:22")
-tof = TimeDelta(150, format='jd')
+tof = TimeDelta(365, format='jd')
 arrival_date = depature_date + tof
 
 r1_eph, v1_eph = get_body_barycentric_posvel('earth', depature_date)
@@ -50,17 +53,20 @@ Need to get sun position and velocity to transform
 baycentric cords to helio-centric
 """
 # Position of Sun
-r_sun, v_sun = get_body_barycentric_posvel('sun', depature_date)
+r_sun1, v_sun1 = get_body_barycentric_posvel('sun', depature_date)
+r_sun2, v_sun2 = get_body_barycentric_posvel('sun', arrival_date)
 
+# Position & Velocity of earth respect to sun
+r1 = (r1_eph.xyz - r_sun1.xyz).to(u.m).value  # type:ignore
+v1 = (v1_eph.xyz - v_sun1.xyz).to(u.m/u.s).value  # type:ignore
 
-r1 = (r1_eph.xyz - r_sun.xyz).to(u.m).value  # type:ignore
-v1 = (v1_eph.xyz - v_sun.xyz).to(u.m/u.s).value  # type:ignore
+# Position & Velocity of mars arrvial respect to sun
+r2 = (r2_eph.xyz - r_sun2.xyz).to(u.m).value  # type:ignore
+v2 = (v2_eph.xyz - v_sun2.xyz).to(u.m/u.s).value  # type:ignore
 
-r2 = (r2_eph.xyz - r_sun.xyz).to(u.m).value  # type:ignore
-v2 = (v2_eph.xyz - v_sun.xyz).to(u.m/u.s).value  # type:ignore
-
-r1_mars = (r1_mars.xyz - r_sun.xyz).to(u.m).value  # type:ignore
-v1_mars = (v1_mars.xyz - v_sun.xyz).to(u.m/u.s).value  # type:ignore
+# Position & Velocity of mars depature respect to sun
+r1_mars = (r1_mars.xyz - r_sun1.xyz).to(u.m).value  # type:ignore
+v1_mars = (v1_mars.xyz - v_sun1.xyz).to(u.m/u.s).value  # type:ignore
 
 # Solve for transfer orbit via lamberts
 transfer.a, transfer.p, transfer.e, transfer_v1, transfer_v2 = lambert_solver(
@@ -70,13 +76,14 @@ transfer_r1 = r1
 
 plot = True
 if plot == True:
+    dt = 86400
     """- - - - - - - - - - - - - - - -PLOTTING- - - - - - - - - - - - - - - -"""
     earth_rs, earth_vs = propogate_orbit(
-        r1, v1, earth.mu, tspan=tof.sec, dt=86400)
+        r1, v1, earth.mu, tspan=tof.sec, dt=dt)
     mars_rs, mars_vs = propogate_orbit(
-        r1_mars, v1_mars, mars.mu, tspan=tof.sec, dt=86400)
+        r1_mars, v1_mars, mars.mu, tspan=tof.sec, dt=dt)
     transfer_rs, transfer_vs = propogate_orbit(
-        transfer_r1, transfer_v1, transfer.mu, tspan=tof.sec, dt=86400)
+        transfer_r1, transfer_v1, transfer.mu, tspan=tof.sec, dt=dt)
 
     ax = plt.figure().add_subplot(projection='3d')
     ax.plot(earth_rs[:, 0], earth_rs[:, 1],
@@ -87,13 +94,42 @@ if plot == True:
             transfer_rs[:, 2], color='orange', label='transfer')
 
     # Add Sun
-    ax.scatter(r_sun.xyz.value[0], r_sun.xyz.value[1], r_sun.xyz.value[2],
+    ax.scatter(r_sun2.xyz.value[0], r_sun2.xyz.value[1], r_sun2.xyz.value[2],
                color='yellow', s=15, marker='o', edgecolor='k', label="SUN")
+
+    # Add Earth Departure Point
+    ax.scatter(earth_rs[0, 0], earth_rs[0, 1], earth_rs[0, 2],
+               color='green', s=15, marker='o', edgecolor='k', label="Earth Depature")
+
+    # Add Earth Arrival Point
+    ax.scatter(earth_rs[-1, 0], earth_rs[-1, 1], earth_rs[-1, 2],
+               color='green', s=15, marker='o', edgecolor='k', label="Earth Arrival")
+
+    # Add Mars Departure Point
+    ax.scatter(mars_rs[0, 0], mars_rs[0, 1], mars_rs[0, 2],
+               color='red', s=15, marker='o', edgecolor='k', label="Mars Depature")
+
+    # Add Mars Arrival Point
+    ax.scatter(mars_rs[-1, 0], mars_rs[-1, 1], mars_rs[-1, 2],
+               color='red', s=15, marker='o', edgecolor='k', label="Mars Arrival")
 
     # formatting
     ax.set_aspect('equal')
     ax.set_xlabel("X [m]")
     ax.set_ylabel("Y [m]")
     ax.set_zlabel("Z [m]")
-    ax.legend()
+    ax.legend(loc='right')
     plt.show()
+
+    dv1 = (np.linalg.norm(transfer_v1)-np.linalg.norm(v1))
+    dv2 = (np.linalg.norm(v2)-np.linalg.norm(transfer_v2))
+    dv = dv1 + dv2
+
+print(f'transfer_v1= {np.linalg.norm(transfer_v1)/1000}')
+print(f'transfer_v2= {np.linalg.norm(transfer_v2)/1000}')
+print(f'earth_v1= {np.linalg.norm(v1)/1000}')
+print(f'mars_v2= {np.linalg.norm(v2)/1000}')
+print(f'c3 = {(np.linalg.norm(transfer_v1)-np.linalg.norm(v1))/1000} km/s')
+print(
+    f'V_inf_arrvial = {(np.linalg.norm(v2)-np.linalg.norm(transfer_v2))/1000} km/s')
+print(f'Detal V = {dv/1000}')

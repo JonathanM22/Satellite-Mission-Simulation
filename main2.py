@@ -119,6 +119,7 @@ if plot == True:
     ax.set_ylabel("Y [m]")
     ax.set_zlabel("Z [m]")
     ax.legend(loc='right')
+    ax.legend(loc='center left', bbox_to_anchor=(1.1, 0.5))
     plt.show()
 
     dv1 = (np.linalg.norm(transfer_v1)-np.linalg.norm(v1))

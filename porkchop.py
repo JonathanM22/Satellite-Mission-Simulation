@@ -152,7 +152,7 @@ fig, ax = plt.subplots(figsize=(10, 20))
 ft = 15
 
 dv_levels = np.arange(0, (DV_CUT_OFF/1000)+5, 5)
-cf = ax.contourf(delta_v_short, levels=dv_levels, cmap="viridis")
+cf = ax.contourf(delta_v_short, levels=dv_levels)
 cbar = fig.colorbar(cf, ax=ax, label="ΔV [km/s]")
 
 dv_short = ax.contour(delta_v_short,  levels=dv_levels, colors='k')

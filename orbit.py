@@ -180,7 +180,7 @@ def propogate_orbit(r, v, mu, tspan, dt):
         step += 1
 
     rs = ys[:, :3]
-    vs = 0
+    vs = ys[:, 3:6]
 
     return (rs, vs)
 

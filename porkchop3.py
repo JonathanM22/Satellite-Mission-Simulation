@@ -22,6 +22,9 @@ AU = 1.496 * 10**11
 SUN_MU = 1.327 * 10**20
 DV_CUT_OFF = 30*1000
 
+"""
+Orbital elemenets are not used in this code, but we use the orbit class
+"""
 # Use Table 1 https://ssd.jpl.nasa.gov/planets/approx_pos.html
 earth = Orbit(a=1.00000261*AU,
               e=0.01671123,
@@ -43,20 +46,21 @@ transfer = Orbit(mu=SUN_MU)
 solar_system_ephemeris.set('de432s')  # Ephemeris from 1950 - 2050
 
 # define range of depature & arrivial dates
-depature_date_1 = Time("2020-06-01")
+"""
+depature_date_1 = Time("2020-07-01")
 depature_date_2 = Time("2020-09-01")
 
 arrival_date_1 = Time("2020-11-01")
-arrival_date_2 = Time("2022-01-24")
-
+arrival_date_2 = Time("2022-11-10")
 """
+
 # define range of depature & arrivial dates
 depature_date_1 = Time("2020-06-01")
-depature_date_2 = Time("2020-06-07")
+depature_date_2 = Time("2020-12-30")
 
-arrival_date_1 = Time("2022-06-01")
-arrival_date_2 = Time("2022-09-01")
-"""
+arrival_date_1 = Time("2021-01-01")
+arrival_date_2 = Time("2022-01-01")
+
 
 step = TimeDelta(1, format='jd')
 
@@ -76,39 +80,54 @@ for dd in np.arange(len(depature_dates)):
         # calculate tof
         tof = (arrival_dates[ar] - depature_dates[dd]).sec  # type:ignore
 
-        r1_eph, v1_eph = get_body_barycentric_posvel(
+        r1_earth_eph, v1_earth_eph = get_body_barycentric_posvel(
             'earth', depature_dates[dd])
-        r2_eph, v2_eph = get_body_barycentric_posvel('mars', arrival_dates[ar])
+        r2_mars_eph, v2_mars_eph = get_body_barycentric_posvel(
+            'mars', depature_dates[dd])
 
         """
         Need to get sun position and velocity to transform
         baycentric cords to helio-centric
         """
         # Position of Sun
-        r_sun1, v_sun1 = get_body_barycentric_posvel('sun', depature_dates[dd])
-        r_sun2, v_sun2 = get_body_barycentric_posvel('sun', depature_dates[dd])
+        r1_sun, v1_sun = get_body_barycentric_posvel('sun', depature_dates[dd])
 
-        # Position & Velocity of earth respect to sun
-        r1 = (r1_eph.xyz - r_sun1.xyz).to(u.m).value  # type:ignore
-        v1 = (v1_eph.xyz - v_sun1.xyz).to(u.m/u.s).value  # type:ignore
+        # Position & Velocity of earth respect to sun @ Depature
+        r1 = (r1_earth_eph.xyz - r1_sun.xyz).to(u.m).value  # type:ignore
+        v1 = (v1_earth_eph.xyz - v1_sun.xyz).to(u.m/u.s).value  # type:ignore
 
-        # Position & Velocity of mars arrvial respect to sun
-        r2 = (r2_eph.xyz - r_sun2.xyz).to(u.m).value  # type:ignore
-        v2 = (v2_eph.xyz - v_sun2.xyz).to(u.m/u.s).value  # type:ignore
+        # Position & Velocity of mars respect to sun @ Depature
+        r1_mars = (r2_mars_eph.xyz - r1_sun.xyz).to(u.m).value  # type:ignore
+        v1_mars = (v2_mars_eph.xyz - v1_sun.xyz).to(u.m /       # type:ignore
+                                                    u.s).value  # type:ignore
 
-        #
-        # Solve for transfer orbit via lamberts short path
-        #
+        """
+        Propogate from JPL data to get the arrivial position of the bodies. 
+        """
+        dt = 86400
+        earth_rs, earth_vs = propogate_orbit(
+            r1, v1, earth.mu, tspan=tof, dt=dt)
+        mars_rs, mars_vs = propogate_orbit(
+            r1_mars, v1_mars, mars.mu, tspan=tof, dt=dt)
+
+        r2_mars = mars_rs[-1]
+        v2_mars = mars_vs[-1]
+
+        """
+        Solve for transfer orbit via lamberts SHORT path
+        """
         try:
             transfer.a, transfer.p, transfer.e, transfer_v1, transfer_v2 = lambert_solver(
-                r1, r2, tof, transfer.mu, desired_path='short')  # type:ignore
+                r1, r2_mars, tof, transfer.mu, desired_path='short')  # type:ignore
 
             transfer_r1 = r1
 
             # delta v1 is escaping earth
             delta_v1 = np.linalg.norm(transfer_v1 - v1)
+
             # delta v2 is for learving transfer orbit
-            delta_v2 = np.linalg.norm(v2 - transfer_v2)
+            delta_v2 = np.linalg.norm(v2_mars - transfer_v2)
+
             # total delta v
             if (delta_v1 + delta_v2) > DV_CUT_OFF:
                 delta_v_short[ar, dd] = DV_CUT_OFF
@@ -117,19 +136,20 @@ for dd in np.arange(len(depature_dates)):
         except:
             delta_v_short[ar, dd] = DV_CUT_OFF
 
-        #
-        # Solve for transfer orbit via lamberts long path
-        #
+        """
+        Solve for transfer orbit via lamberts LONG path
+        """
         try:
             transfer.a, transfer.p, transfer.e, transfer_v1, transfer_v2 = lambert_solver(
-                r1, r2, tof, transfer.mu, desired_path='long')  # type:ignore
+                r1, r2_mars, tof, transfer.mu, desired_path='long')  # type:ignore
 
             transfer_r1 = r1
 
             # delta v1 is escaping earth
             delta_v1 = np.linalg.norm(transfer_v1 - v1)
+
             # delta v2 is for learving transfer orbit
-            delta_v2 = np.linalg.norm(v2 - transfer_v2)
+            delta_v2 = np.linalg.norm(v2_mars - transfer_v2)
             # total delta v
             if (delta_v1 + delta_v2) > DV_CUT_OFF:
                 delta_v_long[ar, dd] = DV_CUT_OFF
@@ -148,10 +168,11 @@ delta_v_short /= 1000
 delta_v_long /= 1000
 
 """- - - - - - - - - - - - - - - -PLOTTING- - - - - - - - - - - - - - - -"""
-fig, ax = plt.subplots(figsize=(10, 20))
-ft = 15
+fig, ax = plt.subplots(figsize=(8, 16))
+ft = 12
 
-dv_levels = np.arange(0, (DV_CUT_OFF/1000)+5, 5)
+dv_levels = np.arange(0, (DV_CUT_OFF/1000), 5)
+
 
 cf = ax.contourf(delta_v_short, inline=False, levels=dv_levels)
 cf = ax.contourf(delta_v_long, inline=False, levels=dv_levels)
@@ -170,58 +191,10 @@ ax.clabel(tof, inline=True, fontsize=ft, fmt="%i")
 
 # formatting
 ax.set_xlabel(
-    f"Days after ({depature_date_1.to_datetime().strftime('%Y-%m-%d')})")
+    f"Depature Julian Date ({depature_date_1.to_datetime().strftime('%Y-%m-%d')})")
 ax.set_ylabel(
-    f"Days after ({arrival_date_1.to_datetime().strftime('%Y-%m-%d')})")
+    f"Arrivial Julian Date ({arrival_date_1.to_datetime().strftime('%Y-%m-%d')})")
 ax.set_title("Earth to Mars Porkchop Plot")
 # ax.set_aspect('equal')
 fig.savefig("porkchop_plot.pdf")
 plt.show()
-
-
-plot = False
-if plot == True:
-    dt = 86400
-    """- - - - - - - - - - - - - - - -PLOTTING- - - - - - - - - - - - - - - -"""
-    earth_rs, earth_vs = propogate_orbit(
-        r1, v1, earth.mu, tspan=tof.sec, dt=dt)
-    mars_rs, mars_vs = propogate_orbit(
-        r1_mars, v1_mars, mars.mu, tspan=tof.sec, dt=dt)
-    transfer_rs, transfer_vs = propogate_orbit(
-        transfer_r1, transfer_v1, transfer.mu, tspan=tof.sec, dt=dt)
-
-    ax = plt.figure().add_subplot(projection='3d')
-    ax.plot(earth_rs[:, 0], earth_rs[:, 1],
-            earth_rs[:, 2], color='green', label='earth')
-    ax.plot(mars_rs[:, 0], mars_rs[:, 1],
-            mars_rs[:, 2], color='red', label='mars')
-    ax.plot(transfer_rs[:, 0], transfer_rs[:, 1],
-            transfer_rs[:, 2], color='orange', label='transfer')
-
-    # Add Sun
-    ax.scatter(r_sun.xyz.value[0], r_sun.xyz.value[1], r_sun.xyz.value[2],
-               color='yellow', s=15, marker='o', edgecolor='k', label="SUN")
-
-    # Add Earth Departure Point
-    ax.scatter(earth_rs[0, 0], earth_rs[0, 1], earth_rs[0, 2],
-               color='green', s=15, marker='o', edgecolor='k', label="Earth Depature")
-
-    # Add Earth Arrival Point
-    ax.scatter(earth_rs[-1, 0], earth_rs[-1, 1], earth_rs[-1, 2],
-               color='green', s=15, marker='o', edgecolor='k', label="Earth Arrival")
-
-    # Add Mars Departure Point
-    ax.scatter(mars_rs[0, 0], mars_rs[0, 1], mars_rs[0, 2],
-               color='red', s=15, marker='o', edgecolor='k', label="Mars Depature")
-
-    # Add Mars Arrival Point
-    ax.scatter(mars_rs[-1, 0], mars_rs[-1, 1], mars_rs[-1, 2],
-               color='red', s=15, marker='o', edgecolor='k', label="Mars Arrival")
-
-    # formatting
-    ax.set_aspect('equal')
-    ax.set_xlabel("X [m]")
-    ax.set_ylabel("Y [m]")
-    ax.set_zlabel("Z [m]")
-    ax.legend(loc='right')
-    plt.show()

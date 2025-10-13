@@ -1,3 +1,6 @@
+"""
+Orbit class 
+"""
 import numpy as np
 from scipy.integrate import ode
 from scipy import optimize

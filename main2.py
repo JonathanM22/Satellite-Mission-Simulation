@@ -47,6 +47,7 @@ depature_date = Time("2026-11-08")
 tof = TimeDelta(304, format='jd')
 arrival_date = depature_date + tof
 print(arrival_date)
+
 r1_earth_eph, v1_earth_eph = get_body_barycentric_posvel(
     'earth', depature_date)
 r1_mars_eph, v1_mars_eph = get_body_barycentric_posvel('mars', depature_date)

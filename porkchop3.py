@@ -20,7 +20,7 @@ from astropy.coordinates import get_body_barycentric_posvel
 EARTH_RAD = 6.371 * 10**6
 AU = 1.496 * 10**11
 SUN_MU = 1.327 * 10**20
-DV_CUT_OFF = 30*1000
+DV_CUT_OFF = 30*1000  # km/s
 
 """
 Orbital elemenets are not used in this code, but we use the orbit class
@@ -55,11 +55,11 @@ arrival_date_2 = Time("2022-11-10")
 """
 
 # define range of depature & arrivial dates
-depature_date_1 = Time("2020-06-01")
-depature_date_2 = Time("2020-12-30")
+depature_date_1 = Time("2026-10-01")
+depature_date_2 = Time("2027-01-30")
 
-arrival_date_1 = Time("2021-01-01")
-arrival_date_2 = Time("2022-01-01")
+arrival_date_1 = Time("2027-08-01")
+arrival_date_2 = Time("2028-02-28")
 
 
 step = TimeDelta(1, format='jd')
@@ -171,11 +171,10 @@ delta_v_long /= 1000
 fig, ax = plt.subplots(figsize=(8, 16))
 ft = 12
 
-dv_levels = np.arange(0, (DV_CUT_OFF/1000), 5)
+dv_levels = np.arange(0, (DV_CUT_OFF/1000), 3)
 
-
-cf = ax.contourf(delta_v_short, inline=False, levels=dv_levels)
-cf = ax.contourf(delta_v_long, inline=False, levels=dv_levels)
+delta_v_best = np.minimum(delta_v_short, delta_v_long)
+cf = ax.contourf(delta_v_best, inline=False, levels=dv_levels)
 cbar = fig.colorbar(cf, ax=ax, label="ΔV [km/s]")
 
 # dv_short = ax.contour(delta_v_short,  inline=False,
@@ -196,5 +195,5 @@ ax.set_ylabel(
     f"Arrivial Julian Date ({arrival_date_1.to_datetime().strftime('%Y-%m-%d')})")
 ax.set_title("Earth to Mars Porkchop Plot")
 # ax.set_aspect('equal')
-fig.savefig("porkchop_plot.pdf")
+fig.savefig("porkchop_plot.png")
 plt.show()

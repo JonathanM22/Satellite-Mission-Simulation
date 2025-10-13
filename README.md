@@ -1,7 +1,11 @@
+# Satellite Mission-Simulation
+
+#
+
 ![](Media/365_tof.png)
 
-![](Media/porkchop_3.png)
+# Porkchop Plot
 
-# ISS-Payload-Mission-Simulation
-
-Group project with the goal of simulating an entire satellite mission
+Deapture Window Oct 2026 - Jan 2027
+Arrival Window Aug 2027 - Feb 2028
+![](Media/porkchop_7.png)

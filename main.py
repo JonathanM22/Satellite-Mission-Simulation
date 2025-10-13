@@ -15,7 +15,7 @@ SUN_MU = 1.327 * 10**20
 # Use Table 1 https://ssd.jpl.nasa.gov/planets/approx_pos.html
 earth = Orbit(a=AU,
               e=0.0167,
-              inc=0,
+              inc=25,
               raan=0,
               aop=102.9,
               mu=SUN_MU)

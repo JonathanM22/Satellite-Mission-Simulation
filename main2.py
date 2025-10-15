@@ -1,5 +1,5 @@
 """
-main2.py Uses JPL ephemeris data as r1 and r2 to calculate the the lamberst problem 
+main2.py Uses JPL ephemeris data as r1 and r2 to calculate the the lambert problem
 """
 from orbit import *
 import numpy as np
@@ -90,18 +90,32 @@ transfer_long.a, transfer_long.p, transfer_long.e, transfer_long_v1, transfer_lo
     # type:ignore
     r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='long')
 
-
+"""
+Propogate transfer orbits
+"""
 transfer_r1 = r1_earth
+
+transfer_short_rs, transfer_short_vs = propogate_orbit(
+    transfer_r1, transfer_short_v1, transfer_short.mu, tspan=tof.sec, dt=dt)
+transfer_long_rs, transfer_long_vs = propogate_orbit(
+    transfer_r1, transfer_long_v1, transfer_long.mu, tspan=tof.sec, dt=dt)
+
+"""
+Calcs
+"""
+
+dv1_short = transfer_short_v1 - v1_earth
+dv2_short = v2_mars - transfer_short_v2
+dv_short = np.linalg.norm(dv1_short) + np.linalg.norm(dv2_short)
+
+dv1_long = transfer_long_v1 - v1_earth
+dv2_long = v2_mars - transfer_long_v2
+dv_long = np.linalg.norm(dv1_long) + np.linalg.norm(dv2_long)
 
 plot = True
 if plot == True:
-    dt = 86400
     """- - - - - - - - - - - - - - - -PLOTTING- - - - - - - - - - - - - - - -"""
-    transfer_short_rs, transfer_short_vs = propogate_orbit(
-        transfer_r1, transfer_short_v1, transfer_short.mu, tspan=tof.sec, dt=dt)
-    transfer_long_rs, transfer_long_vs = propogate_orbit(
-        transfer_r1, transfer_long_v1, transfer_long.mu, tspan=tof.sec, dt=dt)
-
+    fig = plt.figure()
     ax = plt.figure().add_subplot(projection='3d')
     ax.plot(earth_rs[:, 0], earth_rs[:, 1],
             earth_rs[:, 2], color='green', label='earth')
@@ -121,41 +135,72 @@ if plot == True:
                color='green', s=15, marker='o', edgecolor='k', label="Earth Depature")
 
     # Add Earth Arrival Point
-    ax.scatter(earth_rs[-1, 0], earth_rs[-1, 1], earth_rs[-1, 2],
-               color='green', s=15, marker='o', edgecolor='k', label="Earth Arrival")
+    # ax.scatter(earth_rs[-1, 0], earth_rs[-1, 1], earth_rs[-1, 2],
+    #           color='green', s=15, marker='o', edgecolor='k', label="Earth Arrival")
 
     # Add Mars Departure Point
     ax.scatter(mars_rs[0, 0], mars_rs[0, 1], mars_rs[0, 2],
                color='red', s=15, marker='o', edgecolor='k', label="Mars Depature")
 
     # Add Mars Arrival Point
-    ax.scatter(mars_rs[-1, 0], mars_rs[-1, 1], mars_rs[-1, 2],
-               color='red', s=15, marker='o', edgecolor='k', label="Mars Arrival")
+    # ax.scatter(mars_rs[-1, 0], mars_rs[-1, 1], mars_rs[-1, 2],
+    #              color='red', s=15, marker='o', edgecolor='k', label="Mars Arrival")
 
     # formatting
+    ax.set_title(
+        f"Earth–Mars Transfer Orbits {depature_date.strftime('%Y-%m-%d')} - {arrival_date.strftime('%Y-%m-%d')}", fontsize=14, pad=10)
     ax.set_aspect('equal')
+    plt.tight_layout()
     ax.set_xlabel("X [m]")
     ax.set_ylabel("Y [m]")
     ax.set_zlabel("Z [m]")
     ax.legend(loc='right')
-    ax.legend(loc='center left', bbox_to_anchor=(1.1, 0.5))
+    ax.legend(loc='center left', bbox_to_anchor=(1.25, 0.5))
+
     plt.show()
 
-    dv1_short = np.linalg.norm(transfer_short_v1 - v1_earth)
-    dv2_short = np.linalg.norm(v2_mars - transfer_short_v2)
-    dv_short = dv1_short + dv2_short
 
-    dv1_long = np.linalg.norm(transfer_long_v1 - v1_earth)
-    dv2_long = np.linalg.norm(v2_mars - transfer_long_v2)
-    dv_long = dv1_long + dv2_long
+"""
+Print Summary
+"""
+print(f'---------------------------------------------')
+print(f'------------------ SUMMARY ------------------')
+print(f'---------------------------------------------')
 
-print(f'earth_v1= {np.linalg.norm(v1_mars)/1000}')
-print(f'mars_v2= {np.linalg.norm(v2_mars)/1000}')
+print(f'------------------ @ Depature: {depature_date} ------------------')
+print(f'earth_r1= {np.linalg.norm(r1_earth)/1000}')
+print(f'earth_v1= {np.linalg.norm(v1_earth)/1000}')
+print(f'mars_r1= {np.linalg.norm(r1_mars)/1000}')
+print(f'mars_v1= {np.linalg.norm(v1_mars)/1000}')
+
+
+print(f'------------------DelatV SHORT------------------')
+print(f'dv1_short= {dv1_short/1000}')
+print(f'dv1_short_MAG= {np.linalg.norm(dv1_short)/1000}')
+print(f'dv2_short= {dv2_short/1000}')
+print(f'dv2_short_MAG= {np.linalg.norm(dv2_short)/1000}')
+print(f'dv_short= {dv2_short/1000}')
+print(f'dv_short_MAG= {dv_short/1000}')
+
+
+print(f'------------------DelatV LONG------------------')
+print(f'dv1_long= {dv1_long/1000}')
+print(f'dv1_long_MAG= {np.linalg.norm(dv1_long)/1000}')
+print(f'dv2_long= {dv2_long/1000}')
+print(f'dv2_long_MAG= {np.linalg.norm(dv2_long)/1000}')
+print(f'dv_long= {dv_long/1000}')
+print(f'dv_long_MAG= {dv_long/1000}')
+
+
+"""
 print(f'------------------LAMBERTS SHORT------------------')
-print(f'transfer_v1= {np.linalg.norm(transfer_short_v1)/1000}')
-print(f'transfer_v2= {np.linalg.norm(transfer_short_v2)/1000}')
-print(f'Detal V = {dv_short/1000}')
+print(f'transfer_v1_MAG= {np.linalg.norm(transfer_short_v1)/1000}')
+print(f'transfer_v1= {(transfer_short_v1)/1000}')
+print(f'transfer_v2_MAG= {np.linalg.norm(transfer_short_v2)/1000}')
+print(f'transfer_v2= {(transfer_short_v2)/1000}')
+print(f'Detal V = {dv_short/1000}')  # type:ignore
 print(f'------------------LAMBERTS LONG------------------')
 print(f'transfer_v1= {np.linalg.norm(transfer_long_v1)/1000}')
 print(f'transfer_v2= {np.linalg.norm(transfer_long_v2)/1000}')
-print(f'Detal V = {dv_long/1000}')
+print(f'Detal V = {dv_long/1000}')  # type:ignore
+"""

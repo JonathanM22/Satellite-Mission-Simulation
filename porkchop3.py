@@ -174,6 +174,7 @@ ft = 12
 dv_levels = np.arange(0, (DV_CUT_OFF/1000), 3)
 
 delta_v_best = np.minimum(delta_v_short, delta_v_long)
+
 cf = ax.contourf(delta_v_best, inline=False, levels=dv_levels)
 cbar = fig.colorbar(cf, ax=ax, label="ΔV [km/s]")
 
@@ -194,6 +195,6 @@ ax.set_xlabel(
 ax.set_ylabel(
     f"Arrivial Julian Date ({arrival_date_1.to_datetime().strftime('%Y-%m-%d')})")
 ax.set_title("Earth to Mars Porkchop Plot")
-# ax.set_aspect('equal')
+
 fig.savefig("porkchop_plot.png")
 plt.show()

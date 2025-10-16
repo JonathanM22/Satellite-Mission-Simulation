@@ -11,7 +11,6 @@ EARTH_RAD = 6.371 * 10**6
 AU = 1.496 * 10**11
 SUN_MU = 1.327 * 10**20
 
-
 # Use Table 1 https://ssd.jpl.nasa.gov/planets/approx_pos.html
 earth = Orbit(a=AU,
               e=0.0167,

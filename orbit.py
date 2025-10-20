@@ -27,7 +27,7 @@ class Orbit:
         self.h = np.zeros(2)
         self.p = None
         self.energy = None
-
+ 
     def r_at_true_anomaly(self, f, degrees=True):
         """
         Returns r scalor using orbit equation 

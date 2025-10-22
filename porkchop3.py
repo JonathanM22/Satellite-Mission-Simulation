@@ -50,22 +50,23 @@ solar_system_ephemeris.set('de432s')  # Ephemeris from 1950 - 2050
 # Start run timer
 start = time.perf_counter()
 
+"""
 # define range of depature & arrivial dates
 depature_date_1 = Time("2020-07-01")
 depature_date_2 = Time("2020-08-10")
 
 arrival_date_1 = Time("2022-11-01")
 arrival_date_2 = Time("2022-12-10")
-
-
 """
+
+
 # define range of depature & arrivial dates
 depature_date_1 = Time("2026-10-01")
 depature_date_2 = Time("2027-01-30")
 
 arrival_date_1 = Time("2027-08-01")
 arrival_date_2 = Time("2028-02-28")
-"""
+
 
 step = TimeDelta(1, format='jd')
 

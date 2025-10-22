@@ -1,5 +1,5 @@
 """
-porkchop.py Uses JPL ephemeris data as r1 and r2 to calculate the the lamberst problem over a range
+porkchop3.py Uses JPL ephemeris data as r1 and r2 to calculate the the lamberst problem over a range
 of arrival and depature dates and generates a porkchop plot. 
 """
 from orbit import *
@@ -7,6 +7,8 @@ import numpy as np
 from scipy.integrate import ode
 from scipy import optimize
 import matplotlib.pyplot as plt
+import time
+from multiprocessing import Pool
 
 from astropy.time import Time
 from astropy.time import TimeDelta
@@ -20,7 +22,7 @@ from astropy.coordinates import get_body_barycentric_posvel
 EARTH_RAD = 6.371 * 10**6
 AU = 1.496 * 10**11
 SUN_MU = 1.327 * 10**20
-DV_CUT_OFF = 30*1000  # km/s
+DV_CUT_OFF = 150*1000  # km/s
 
 """
 Orbital elemenets are not used in this code, but we use the orbit class
@@ -45,23 +47,26 @@ transfer = Orbit(mu=SUN_MU)
 # intialize jpl ephemeris
 solar_system_ephemeris.set('de432s')  # Ephemeris from 1950 - 2050
 
-# define range of depature & arrivial dates
-
-depature_date_1 = Time("2020-07-01")
-depature_date_2 = Time("2020-07-10")
-
-arrival_date_1 = Time("2022-11-01")
-arrival_date_2 = Time("2022-11-10")
-
+# Start run timer
+start = time.perf_counter()
 
 """
+# define range of depature & arrivial dates
+depature_date_1 = Time("2020-07-01")
+depature_date_2 = Time("2020-08-10")
+
+arrival_date_1 = Time("2022-11-01")
+arrival_date_2 = Time("2022-12-10")
+"""
+
+
 # define range of depature & arrivial dates
 depature_date_1 = Time("2026-10-01")
 depature_date_2 = Time("2027-01-30")
 
 arrival_date_1 = Time("2027-08-01")
 arrival_date_2 = Time("2028-02-28")
-"""
+
 
 step = TimeDelta(1, format='jd')
 
@@ -162,7 +167,13 @@ for dd in np.arange(len(depature_dates)):
         tof_days[ar, dd] = (arrival_dates[ar] -
                             depature_dates[dd]).to('day').value  # type:ignore
 
-        print(f'SHORT: {delta_v_short[ar, dd]} | LONG: {delta_v_long[ar, dd]}')
+        # print(f'SHORT: {delta_v_short[ar, dd]} | LONG: {delta_v_long[ar, dd]}')
+
+
+# END run timer
+end = time.perf_counter()
+
+print(f" TIME TO RUN PROGRAM IS {end-start}")
 
 # Convert to km/s
 delta_v_short /= 1000

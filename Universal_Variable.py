@@ -118,3 +118,58 @@ if __name__ == "__main__":
 
 #"""
 # Algorithm 3: Universal Lambert Solver
+
+def universal_lambert(r1_vec, r2_vec, TOF, psi_0, psi_upper,psi_lower,M=100, eps=1e-12,tm=1,mu=3.986e5):
+    
+    r1 = np.linalg.norm(r1_vec)
+    r2 = np.linalg.norm(r2_vec)
+
+    gamma = np.dot(r1_vec, r2_vec) / (r1 * r2)
+    beta = tm * (1-gamma**2)**0.5
+    A = tm * (r1 * r2 * (1 + gamma))**0.5
+
+    if A == 0:
+        # this line was suggested by VS code: I was gonna have a print statement here
+        raise ValueError("Transfer angle is 180 degrees; Lambert's problem is undefined.")
+    
+    for i in range(M):
+        psi = psi_0
+        (C2,C3) = stumpff_C2_C3(psi,eps=eps,M=M)
+        B = r1 + r2 + (1/math.sqrt(mu)) * (A * (psi * C2 - 1))
+        # paper says to readjust psi_lower until B > 0 if both A>0 and B<0
+
+        chi = math.sqrt(B/C2)
+
+        delta_tt = 1/math.sqrt(mu) * (chi**3 * C3 + A * math.sqrt(B))
+
+        if abs(delta_tt - TOF) < eps:
+            # compute F & G function eqns
+            # x1_dot terms = 
+            # x2_dot terms = 
+            F = 1 - B/r1
+            G = A * math.sqrt(B/mu)
+            G_dot = 1 - B/r2
+            v1_vec = 1/G * np.array([r2_vec[0] - F * r1_vec[0], r2_vec[1] - F * r1_vec[1], r2_vec[2] - F * r1_vec[2]])
+            v2_vec = 1/G * np.array([G_dot * r2_vec[0] - r1_vec[0], G_dot * r2_vec[1] - r1_vec[1], G_dot * r2_vec[2] - r1_vec[2]])
+
+        if delta_tt <= TOF:
+          psi_val = .5 * (psi_upper + psi_lower)
+          psi_0 = psi_val
+        return psi_0
+    
+    psi_lower = psi
+
+    F = 1 - B/r1
+    G = A * math.sqrt(B/mu)
+    G_dot = 1 - B/r2
+
+    v1_vec = 1/G * np.array([r2_vec[0] - F * r1_vec[0], r2_vec[1] - F * r1_vec[1], r2_vec[2] - F * r1_vec[2]])
+    v2_vec = 1/G * np.array([G_dot * r2_vec[0] - r1_vec[0], G_dot * r2_vec[1] - r1_vec[1], G_dot * r2_vec[2] - r1_vec[2]])
+    return v1_vec, v2_vec
+
+
+
+
+
+
+       

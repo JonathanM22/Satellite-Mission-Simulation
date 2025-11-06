@@ -136,28 +136,29 @@ def universal_lambert(r1_vec, r2_vec, TOF, psi_0, psi_upper,psi_lower,M=100, eps
         psi = psi_0
         (C2,C3) = stumpff_C2_C3(psi,eps=eps,M=M)
         B = r1 + r2 + (1/math.sqrt(mu)) * (A * (psi * C2 - 1))
+
         # paper says to readjust psi_lower until B > 0 if both A>0 and B<0
 
-        chi = math.sqrt(B/C2)
+        # suggestion from chatgpt
+        if A > 0 and B < 0:
+            psi_lower = psi_lower/2
+            continue
 
+        chi = math.sqrt(B/C2)
         delta_tt = 1/math.sqrt(mu) * (chi**3 * C3 + A * math.sqrt(B))
 
         if abs(delta_tt - TOF) < eps:
             # compute F & G function eqns
-            # x1_dot terms = 
-            # x2_dot terms = 
-            F = 1 - B/r1
-            G = A * math.sqrt(B/mu)
-            G_dot = 1 - B/r2
-            v1_vec = 1/G * np.array([r2_vec[0] - F * r1_vec[0], r2_vec[1] - F * r1_vec[1], r2_vec[2] - F * r1_vec[2]])
-            v2_vec = 1/G * np.array([G_dot * r2_vec[0] - r1_vec[0], G_dot * r2_vec[1] - r1_vec[1], G_dot * r2_vec[2] - r1_vec[2]])
+            # end the for loop and return v1_vec and v2_vec
+            break 
 
         if delta_tt <= TOF:
           psi_val = .5 * (psi_upper + psi_lower)
           psi_0 = psi_val
+          return psi_0
         return psi_0
     
-    psi_lower = psi
+    psi_upper = psi
 
     F = 1 - B/r1
     G = A * math.sqrt(B/mu)
@@ -165,6 +166,7 @@ def universal_lambert(r1_vec, r2_vec, TOF, psi_0, psi_upper,psi_lower,M=100, eps
 
     v1_vec = 1/G * np.array([r2_vec[0] - F * r1_vec[0], r2_vec[1] - F * r1_vec[1], r2_vec[2] - F * r1_vec[2]])
     v2_vec = 1/G * np.array([G_dot * r2_vec[0] - r1_vec[0], G_dot * r2_vec[1] - r1_vec[1], G_dot * r2_vec[2] - r1_vec[2]])
+    
     return v1_vec, v2_vec
 
 

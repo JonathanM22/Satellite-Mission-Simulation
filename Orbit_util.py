@@ -3,6 +3,12 @@ import numpy as np
 from scipy.integrate import ode
 from scipy import optimize
 import matplotlib.pyplot as plt
+from body import Body
+from astropy import constants as const
+
+
+G = 6.674 * 10**-11  # m^3 kg^-1 s^-2
+
 
 def lambert_solver(r1_vec, r2_vec, tof, mu, desired_path='short'):
     """
@@ -166,3 +172,29 @@ def y_dot(t, y, mu):
     r_norm = np.linalg.norm(r)
     ax, ay, az = -r*mu/r_norm**3  # Two body Problem ODE
     return [vx, vy, vz, ax, ay, az]
+
+
+def y_dot_n_body(t, y):
+
+    n_bodies = len(y)/6
+
+    for body in range(n_bodies):
+        a
+
+
+def n_body_accel(self, central_body: Body, bodies: list[Body], timestep):
+
+    r_n = central_body.r_ar[timestep]
+    r_n_mag = np.linalg.norm(r_n)
+
+    a = ((-G*central_body.mass)/(r_n_mag**3))*r_n
+
+    for body in bodies:
+
+        r_k = body.r_ar[timestep]
+        r = r_k - r_n
+        r_mag = np.linalg.norm(r)
+
+        a += ((G*body.mass)/(r_mag**3)) * r
+
+    return a

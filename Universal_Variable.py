@@ -187,7 +187,7 @@ def universal_lambert(r1_vec, r2_vec, TOF, psi_0, psi_upper,psi_lower,M, eps,tm,
     h = np.cross(r1_vec, v1_vec)
     e = np.linalg.norm( np.cross(v1_vec,h)/mu - r1_vec/r1)
 
-    if e < 1:
+    if e < 1-eps:
         orbit_type = "Elliptic"
     elif e > 1:
         orbit_type = "Hyperbolic"

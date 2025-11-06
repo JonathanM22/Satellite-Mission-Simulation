@@ -2,6 +2,7 @@
 main2.py Uses JPL ephemeris data as r1 and r2 to calculate the the lambert problem
 """
 from orbit import *
+from orbit_util import *
 import numpy as np
 from scipy.integrate import ode
 from scipy import optimize

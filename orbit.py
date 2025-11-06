@@ -5,11 +5,6 @@ import numpy as np
 from scipy.integrate import ode
 from scipy import optimize
 
-# Define variables to be imported
-# when module is imported
-__all__ = ['Orbit', 'orb_2_pqw', 'perif_2_eci',
-           'propogate_orbit', 'lambert_solver']
-
 
 class Orbit:
     """
@@ -76,4 +71,3 @@ class Orbit:
         except:
             raise ValueError(
                 "Orbit has period cannot be calculated. Check a or mu")
-        

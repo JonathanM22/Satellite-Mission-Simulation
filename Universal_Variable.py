@@ -7,7 +7,7 @@ import math
 # for C2, (eta, H0) = (3,1/2) 
 # for C3, (eta, H0) = (5,1/6)
 
-def stumpff_constraint(psi,H0,eta,eps=1e-8,M=100):
+def stumpff_constraint(psi,H0,eta,eps,M):
 
     H = H0
     C = H0
@@ -37,7 +37,7 @@ def stumpff_constraint(psi,H0,eta,eps=1e-8,M=100):
     # set K = K-1 --> solve C3 and C2 using eqns
     # set psi = 4*psi and repeat until K = 0
 
-def stumpff_C2_C3(psi,psi_m=.2,eps=1e-12,M=100):
+def stumpff_C2_C3(psi,psi_m=1,eps=1e-12,M=50):
     
     K = 0 
 
@@ -119,7 +119,7 @@ if __name__ == "__main__":
 #"""
 # Algorithm 3: Universal Lambert Solver
 
-def universal_lambert(r1_vec, r2_vec, TOF, psi_0, psi_upper,psi_lower,M=100, eps=1e-12,tm=1,mu=3.986e5):
+def universal_lambert(r1_vec, r2_vec, TOF, psi_0, psi_upper,psi_lower,M, eps,tm,mu):
     
     r1 = np.linalg.norm(r1_vec)
     r2 = np.linalg.norm(r2_vec)
@@ -128,14 +128,16 @@ def universal_lambert(r1_vec, r2_vec, TOF, psi_0, psi_upper,psi_lower,M=100, eps
     beta = tm * (1-gamma**2)**0.5
     A = tm * (r1 * r2 * (1 + gamma))**0.5
 
-    if A == 0:
+    if abs(A) < 0:
         # this line was suggested by VS code: I was gonna have a print statement here
         raise ValueError("Transfer angle is 180 degrees; Lambert's problem is undefined.")
     
     for i in range(M):
+
         psi = psi_0
         (C2,C3) = stumpff_C2_C3(psi,eps=eps,M=M)
-        B = r1 + r2 + (1/math.sqrt(mu)) * (A * (psi * C2 - 1))
+        B = r1 + r2 + (1/math.sqrt(C2)) * (A * (psi * C2 - 1))
+        print(f'Iteration {i+1}: psi = {psi}, B = {B}')
 
         # paper says to readjust psi_lower until B > 0 if both A>0 and B<0
 
@@ -152,13 +154,11 @@ def universal_lambert(r1_vec, r2_vec, TOF, psi_0, psi_upper,psi_lower,M=100, eps
             # end the for loop and return v1_vec and v2_vec
             break 
 
+        # step 7.1
         if delta_tt <= TOF:
-          psi_val = .5 * (psi_upper + psi_lower)
-          psi_0 = psi_val
-          return psi_0
-        return psi_0
-    
-    psi_upper = psi
+          psi_current = .5 * (psi_upper + psi_lower)    
+          psi_0 = psi_current
+
 
     F = 1 - B/r1
     G = A * math.sqrt(B/mu)
@@ -166,9 +166,26 @@ def universal_lambert(r1_vec, r2_vec, TOF, psi_0, psi_upper,psi_lower,M=100, eps
 
     v1_vec = 1/G * np.array([r2_vec[0] - F * r1_vec[0], r2_vec[1] - F * r1_vec[1], r2_vec[2] - F * r1_vec[2]])
     v2_vec = 1/G * np.array([G_dot * r2_vec[0] - r1_vec[0], G_dot * r2_vec[1] - r1_vec[1], G_dot * r2_vec[2] - r1_vec[2]])
-    
+
     return v1_vec, v2_vec
 
+#v1_vec,v2_vec = universal_lambert(np.array([1.01566,0,0]), np.array([.387926,.183961,.551884]),TOF=5, psi_0=.8, psi_upper=4*math.pi**2,psi_lower=-4*math.pi**2,M=50, eps=1e-7,tm=1,mu=1)
+
+v1_vec, v2_vec = universal_lambert(
+    np.array([1.01566, 0, 0]),
+    np.array([0.387926, 0.183961, 0.551884]),
+    TOF = 5,
+    psi_0 = 0.8,
+    psi_upper = 4 * math.pi**2,
+    psi_lower = -4 * math.pi**2,
+    M = 50, 
+    eps = 1e-7,
+    tm = 1,
+    mu = 1
+)
+
+print(f'v1_vec = {v1_vec}')
+print(f'v2_vec = {v2_vec}')
 
 
 

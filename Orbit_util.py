@@ -174,27 +174,39 @@ def y_dot(t, y, mu):
     return [vx, vy, vz, ax, ay, az]
 
 
-def y_dot_n_body(t, y):
+def y_dot_n_body(t, y, central_body: Body, n_bodies: int, bodies: list[Body]):
+    """
+    N Body physics used for propagation cause im goated
+    """
+    y_dot = np.zeros(n_bodies*6)
 
-    n_bodies = len(y)/6
+    i = 0
+    for _ in range(len(bodies)):
 
-    for body in range(n_bodies):
-        a
+        y_nbody = y[i:i+6]
+        r_nbody = y_nbody[0:3]
+        v_nbody = y_nbody[3:6]
+        r_nbody_mag = np.linalg.norm(r_nbody)
+        a_nbody = ((-G*central_body.mass)/(r_nbody_mag**3))*r_nbody
 
+        ii = 0
+        for body in bodies:
+            y_kbody = y[ii:ii+6]
 
-def n_body_accel(self, central_body: Body, bodies: list[Body], timestep):
+            if (y_kbody == y_nbody).all():
+                pass
+            else:
+                r_kbody = y_kbody[0:3]
+                v_kbody = y_kbody[3:6]
+                r_kbody_mag = np.linalg.norm(r_kbody)
 
-    r_n = central_body.r_ar[timestep]
-    r_n_mag = np.linalg.norm(r_n)
+                r = r_kbody - r_nbody
+                r_mag = np.linalg.norm(r)
+                a_nbody += ((G*body.mass)/(r_mag**3)) * r
 
-    a = ((-G*central_body.mass)/(r_n_mag**3))*r_n
+            ii += 6
 
-    for body in bodies:
+        y_dot[i:i+6] = np.concatenate((v_nbody, a_nbody))
+        i += 6
 
-        r_k = body.r_ar[timestep]
-        r = r_k - r_n
-        r_mag = np.linalg.norm(r)
-
-        a += ((G*body.mass)/(r_mag**3)) * r
-
-    return a
+    return y_dot

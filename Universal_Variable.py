@@ -23,7 +23,6 @@ def stumpff_constraint(psi,H0,eta,eps,M):
         L = L + 2
     return C
 
-
 # Algorithm 2: Compute C2 and C3 for any psi using Series and Recursion
 
 # calculate C2 and C3 using series and recursion
@@ -57,7 +56,6 @@ def stumpff_C2_C3(psi,psi_m=1,eps=1e-12,M=50):
         C2 = C2_new
         C3 = C3_new
     return (C2,C3)
-
 
 #"""
 # Verification functions using eqns
@@ -117,7 +115,7 @@ if __name__ == "__main__":
     ) else "\nTest failed!")
 
 '''
-# Algorithm 3: Universal Lambert Solver
+# Algorithm 3: Universal Lambert Solver ---------------------------------------------------------------------------------------------
 def universal_lambert(r1_vec, r2_vec, TOF, psi_0, psi_upper,psi_lower,M, eps,tm,mu):
     
     r1 = np.linalg.norm(r1_vec)
@@ -195,8 +193,10 @@ def universal_lambert(r1_vec, r2_vec, TOF, psi_0, psi_upper,psi_lower,M, eps,tm,
         orbit_type = "Parabolic"
     print(f"\nOrbit is {orbit_type} with eccentricity {e:.10f}")
     
-
     return v1_vec, v2_vec, B, chi, psi
+# -----------------------------------------------------------------------------------------------------------------------------
+
+# Test Cases
 
 # Elliptic Test Case
 v1_vec, v2_vec, B, chi, psi = universal_lambert(

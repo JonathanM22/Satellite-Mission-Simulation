@@ -39,7 +39,11 @@ def lambert_solver(r1_vec, r2_vec, tof, mu, desired_path='short'):
         # print("elliptical solution")
         pass
     else:
-        # print('hyperbolic solution')
+        print('hyperbolic solution')
+        print(f"{r1_vec}")
+        print(f"{r2_vec}")
+
+        # ValueError('Hyperbolic Solution')
         return None
 
     # Calculate minumum transfer

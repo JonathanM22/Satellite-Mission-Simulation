@@ -121,7 +121,7 @@ if __name__ == "__main__":
 '''
 # Algorithm 3: Universal Lambert Solver
 
-
+# clean up input r1 r2 TOF, run cases to assign PSI's 
 def universal_lambert(r1_vec, r2_vec, TOF, psi_0, psi_upper, psi_lower, M, eps, tm, mu):
 
     r1 = np.linalg.norm(r1_vec)
@@ -142,21 +142,22 @@ def universal_lambert(r1_vec, r2_vec, TOF, psi_0, psi_upper, psi_lower, M, eps, 
 
         (C2, C3) = stumpff_C2_C3(psi, eps=eps, M=M)
         B = r1 + r2 + (1/math.sqrt(C2)) * (A * (psi * C3 - 1))
-        # print(f'Iteration {i+1}: psi = {psi}, B = {B}')
+        print(f'Iteration {i+1}: psi = {psi}, B = {B}')
 
         # paper says to readjust psi_lower until B > 0 if both A>0 and B<0
 
        # used if B < 0, otherwhise Chi would be complex
-        i = 0
-        while B < 0 and i < M:
+        ii = 0
+        while B < 0 and ii < M:
             # used to move psi_lower up
             psi_lower = .5 * (psi + psi_lower)
             # in turn moves psi up
             psi = .5 * (psi_upper + psi_lower)
             C2, C3 = stumpff_C2_C3(psi, eps=eps, M=M)
             B = r1 + r2 + (1/math.sqrt(C2)) * (A * (psi * C2 - 1))
-            i += 1
-            if i == M:
+            ii += 1
+            print(psi_lower)
+            if ii == M:
                 raise ValueError(
                     "Failed to find a positive B value within maximum iterations.")
             continue

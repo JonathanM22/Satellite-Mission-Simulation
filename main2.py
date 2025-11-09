@@ -2,7 +2,7 @@
 main2.py Uses JPL ephemeris data as r1 and r2 to calculate the the lambert problem
 """
 from orbit import *
-from orbit_util import *
+from Orbit_util import *
 import numpy as np
 from scipy.integrate import ode
 from scipy import optimize
@@ -13,6 +13,7 @@ from astropy.time import TimeDelta
 from astropy import units as u
 from astropy.coordinates import solar_system_ephemeris
 from astropy.coordinates import get_body_barycentric_posvel
+from Universal_Variable import *
 
 # Constants
 # ALL constants are in SI UNITS! (meters, seconds, etc.)
@@ -83,13 +84,26 @@ v2_mars = mars_vs[-1]
 """
 Solving for lamberts.  
 """
-transfer_short.a, transfer_short.p, transfer_short.e, transfer_short_v1, transfer_short_v2 = lambert_solver(
-    # type:ignore
-    r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='short')
+# transfer_short.a, transfer_short.p, transfer_short.e, transfer_short_v1, transfer_short_v2 = lambert_solver(
+#     # type:ignore
+#     r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='short')
 
-transfer_long.a, transfer_long.p, transfer_long.e, transfer_long_v1, transfer_long_v2 = lambert_solver(
-    # type:ignore
-    r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='long')
+# transfer_long.a, transfer_long.p, transfer_long.e, transfer_long_v1, transfer_long_v2 = lambert_solver(
+#     # type:ignore
+#     r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='long')
+
+transfer_short_v1, trasnfer_short_v2, _,_,_ = universal_lambert(
+    np.array([-0.668461, -2.05807, -1.9642]),
+    np.array([3.18254, 2.08111, -4.89447]),
+    TOF=5,
+    psi_0=0.8,
+    psi_upper=4 * math.pi**2,
+    psi_lower=-4 * math.pi**2,
+    M=50,
+    eps=1e-7,
+    tm=1,
+    mu=1
+)
 
 """
 Propogate transfer orbits

@@ -46,7 +46,7 @@ Using JPL data to get postion and velocity of earth and mars @ Depature
 """
 solar_system_ephemeris.set('de432s')  # Ephemeris from 1950 - 2050
 depature_date = Time("2026-11-08")
-tof = TimeDelta(304, format='jd')
+tof = TimeDelta(100, format='jd')
 arrival_date = depature_date + tof
 print(arrival_date)
 
@@ -84,26 +84,18 @@ v2_mars = mars_vs[-1]
 """
 Solving for lamberts.  
 """
-# transfer_short.a, transfer_short.p, transfer_short.e, transfer_short_v1, transfer_short_v2 = lambert_solver(
-#     # type:ignore
-#     r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='short')
+transfer_short.a, transfer_short.p, transfer_short.e, transfer_short_v1, transfer_short_v2 = universal_lambert(
+    # type:ignore
+    r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='short')
 
-# transfer_long.a, transfer_long.p, transfer_long.e, transfer_long_v1, transfer_long_v2 = lambert_solver(
-#     # type:ignore
-#     r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='long')
+transfer_long.a, transfer_long.p, transfer_long.e, transfer_long_v1, transfer_long_v2 = universal_lambert(
+    # type:ignore
+    r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='long')
 
-transfer_short_v1, trasnfer_short_v2, _,_,_ = universal_lambert(
-    np.array([-0.668461, -2.05807, -1.9642]),
-    np.array([3.18254, 2.08111, -4.89447]),
-    TOF=5,
-    psi_0=0.8,
-    psi_upper=4 * math.pi**2,
-    psi_lower=-4 * math.pi**2,
-    M=50,
-    eps=1e-7,
-    tm=1,
-    mu=1
-)
+print(f'semi major axis is {transfer_short.a}')
+print(f' semi major axis is {transfer_long.a}')
+print(f'  Eccentricity is  {transfer_long.e}')
+
 
 """
 Propogate transfer orbits

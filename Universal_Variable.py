@@ -1,5 +1,7 @@
 import numpy as np
 import math
+from scipy import optimize
+
 
 # Algorithm 1: Computation of Stumpff Functions C2 and C3
 # set C2(psi) = ( 1 - cos(sqrt(psi)) ) / psi)
@@ -122,27 +124,96 @@ if __name__ == "__main__":
 # Algorithm 3: Universal Lambert Solver
 
 # clean up input r1 r2 TOF, run cases to assign PSI's 
-def universal_lambert(r1_vec, r2_vec, TOF, psi_0, psi_upper, psi_lower, M, eps, tm, mu):
+# want to keep psi's the way they are irregardless of orbit type
+# full out lambert to solve for a 
+# first set up lamberts to solve for a,e,p then figure out way to mess with stumpff psi values, then fix to only input r1 r2 tof
+
+#--------------------------------------------------------------------------------------------------------------------
+def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
 
     r1 = np.linalg.norm(r1_vec)
     r2 = np.linalg.norm(r2_vec)
 
+    if desired_path == 'short':
+        delta_f = np.arccos((np.dot(r1_vec, r2_vec)) / (r1*r2))
+    elif desired_path == 'long':
+        delta_f = (2*np.pi) - np.arccos((np.dot(r1_vec, r2_vec)) / (r1*r2))    
+            
+    c = np.sqrt(r1**2 + r2**2 - 2*r1*r2*np.cos(delta_f))
+
+    s = .5 * (r1+r2+c)
+
+    if 0 <= delta_f < np.pi:
+        t_parab = 1/3 * np.sqrt(2/mu) * (s**3/2 - (s-c)**3/2)
+    else:
+        t_parab = 1/3 * np.sqrt(2/mu) * (s**3/2 + (s-c)**3/2)
+
+ # this is where I can set the psi values
+    if TOF > t_parab:
+        psi_0 = 0.8
+        psi_upper = 4 * math.pi**2
+        psi_lower = -4 * math.pi**2
+        print("Transfer Orbit is Elliptical")
+    elif TOF == t_parab:
+        psi_0 = 0.8
+        psi_upper = 4 * math.pi**2
+        psi_lower = -4 * math.pi**2
+        print("Transfer Orbit is Parabolic")
+    else:
+        psi_0 = -0.1
+        psi_upper = 4 * math.pi**2
+        psi_lower = -2
+        print("Transfer Orbit is Hyperbolic")
+
+    alpha_m = np.pi
+
+    if 0 <= delta_f < np.pi:
+        beta_m = 2 * np.arcsin(np.sqrt( (s-c)/s))
+    else:
+        beta_m = -2* np.arcsin(np.sqrt( (s-c)/s))
+
+    tm = np.sqrt(s**3/(8*mu)) * ( np.pi - beta_m + np.sin(beta_m))
+
+    if TOF <= tm:
+        def alpha(a): return 2*np.arcsin(np.sqrt(s/(2*a)))
+    else:   
+        def alpha(a): return 2*np.pi - 2*np.arcsin(np.sqrt(s/(2*a)))
+
+    if 0 <= delta_f < np.pi:
+        def beta(a): return 2*np.asin(np.sqrt((s-c)/(2*a)))
+    elif np.pi <= delta_f < 2*np.pi:
+        def beta(a): return -2*np.asin(np.sqrt((s-c)/(2*a)))
+    
+    # some way to solve IVP for a 
+    # solve a^3/2 * (alpha - sin(alpha) - Beta + sin(Beta)) - sqrt(mu) * (t2-t1) = 0 --> TOF = t2-t1
+
+   # bisection method to solve for a
+    def lambert_eq(a): return ((np.sqrt(a**3)) * (alpha(a) - np.sin(alpha(a) ) - beta(a) + np.sin(beta(a)))) - ((np.sqrt(mu))*TOF)
+    SMA = optimize.brentq(lambert_eq, s/2, s/2 *100)
+    print(f"Semi Major Axis is {SMA} Meters")
+    p = (((4*SMA)*(s-r1)*(s-r2))/(c**2)) / (np.sin((alpha(SMA) + beta(SMA))/2)**2)  # type:ignore
+    # e = np.sqrt(1 - (p/SMA))
+
     gamma = np.dot(r1_vec, r2_vec) / (r1 * r2)
-    beta = tm * (1-gamma**2)**0.5
-    A = tm * (r1 * r2 * (1 + gamma))**0.5
+    A =  (r1 * r2 * (1 + gamma))**0.5
 
     if abs(A) < 0:
         # this line was suggested by VS code: I was gonna have a print statement here
-        raise ValueError(
-            "Transfer angle is 180 degrees; Lambert's problem is undefined.")
+        raise ValueError("Transfer angle is 180 degrees; Lambert's problem is undefined.")
 
     psi = psi_0
+
+    # tolerance
+    eps = 1e-12
+
+    # Max iter
+    M = 100
 
     for i in range(M):
 
         (C2, C3) = stumpff_C2_C3(psi, eps=eps, M=M)
-        B = r1 + r2 + (1/math.sqrt(C2)) * (A * (psi * C3 - 1))
-        print(f'Iteration {i+1}: psi = {psi}, B = {B}')
+        B = r1 + r2 + (1/np.sqrt(C2)) * (A * (psi * C3 - 1))
+        # print(f'Iteration {i+1}: psi = {psi}, B = {B}')
 
         # paper says to readjust psi_lower until B > 0 if both A>0 and B<0
 
@@ -154,7 +225,7 @@ def universal_lambert(r1_vec, r2_vec, TOF, psi_0, psi_upper, psi_lower, M, eps, 
             # in turn moves psi up
             psi = .5 * (psi_upper + psi_lower)
             C2, C3 = stumpff_C2_C3(psi, eps=eps, M=M)
-            B = r1 + r2 + (1/math.sqrt(C2)) * (A * (psi * C2 - 1))
+            B = r1 + r2 + (1/np.sqrt(C2)) * (A * (psi * C3 - 1))
             ii += 1
             print(psi_lower)
             if ii == M:
@@ -162,8 +233,8 @@ def universal_lambert(r1_vec, r2_vec, TOF, psi_0, psi_upper, psi_lower, M, eps, 
                     "Failed to find a positive B value within maximum iterations.")
             continue
 
-        chi = math.sqrt(B/C2)
-        delta_tt = (chi**3 * C3 + A * math.sqrt(B))/math.sqrt(mu)
+        chi = np.sqrt(B/C2)
+        delta_tt = (chi**3 * C3 + A * np.sqrt(B))/np.sqrt(mu)
 
         if abs(delta_tt - TOF) < eps:
             # compute F & G function eqns
@@ -185,7 +256,7 @@ def universal_lambert(r1_vec, r2_vec, TOF, psi_0, psi_upper, psi_lower, M, eps, 
         # psi_upper = psi
 
     F = 1 - B/r1
-    G = A * math.sqrt(B/mu)
+    G = A * np.sqrt(B/mu)
     G_dot = 1 - B/r2
 
     v1_vec = 1/G * np.array([r2_vec[0] - F * r1_vec[0],
@@ -204,58 +275,42 @@ def universal_lambert(r1_vec, r2_vec, TOF, psi_0, psi_upper, psi_lower, M, eps, 
         orbit_type = "Parabolic"
     print(f"\nOrbit is {orbit_type} with eccentricity {e:.10f}")
 
-    return v1_vec, v2_vec, B, chi, psi
+    return SMA,p,e,v1_vec,v2_vec
+
+    # return v1_vec, v2_vec, B, chi, psi, SMA
+# --------------------------------------------------------------------------------------------------------------------
 
 
-# Elliptic Test Case
-v1_vec, v2_vec, B, chi, psi = universal_lambert(
-    np.array([1.01566, 0, 0]),
-    np.array([0.387926, 0.183961, 0.551884]),
-    TOF=5,
-    psi_0=0.8,
-    psi_upper=4 * math.pi**2,
-    psi_lower=-4 * math.pi**2,
-    M=50,
-    eps=1e-10,
-    tm=1,
-    mu=1
-)
-print(f'Final v1_vec = {v1_vec}')
-print(f'Final v2_vec = {v2_vec}')
-print(f'Final B = {B}, Final Chi = {chi}, Final Psi = {psi}\n')
+# # Elliptic Test Case
+# v1_vec, v2_vec, B, chi, psi,SMA = universal_lambert(
+#     np.array([1.01566, 0, 0]),
+#     np.array([0.387926, 0.183961, 0.551884]),
+#     TOF=5,
+#     mu=1,
+#     desired_path = 'short'
+# )
+# print(f'Final v1_vec = {v1_vec}')
+# print(f'Final v2_vec = {v2_vec}')
+# print(f'Final B = {B}, Final Chi = {chi}, Final Psi = {psi}\n')
 
+# # Hyperbolic Test Case
+# v1_vec, v2_vec, B, chi, psi, SMA = universal_lambert(
+#     np.array([-0.668461, -2.05807, -1.9642]),
+#     np.array([3.18254, 2.08111, -4.89447]),
+#     TOF=5,
+#     mu=1
+# )
+# print(f'Final v1_vec = {v1_vec}')
+# print(f'Final v2_vec = {v2_vec}')
+# print(f'Final B = {B}, Final Chi = {chi}, Final Psi = {psi}\n')
 
-# Parabolic Test Case
-v1_vec, v2_vec, B, chi, psi = universal_lambert(
-    np.array([-0.253513, 1.21614, -1.20916]),
-    np.array([-0.434366, 4.92818, 0.0675545]),
-    TOF=5,
-    psi_0=0.8,
-    psi_upper=4 * math.pi**2,
-    psi_lower=-4 * math.pi**2,
-    M=50,
-    eps=1e-6,
-    tm=1,
-    mu=1
-)
-print(f'Final v1_vec = {v1_vec}')
-print(f'Final v2_vec = {v2_vec}')
-print(f'Final B = {B}, Final Chi = {chi}, Final Psi = {psi}\n')
-
-
-# Hyperbolic Test Case
-v1_vec, v2_vec, B, chi, psi = universal_lambert(
-    np.array([-0.668461, -2.05807, -1.9642]),
-    np.array([3.18254, 2.08111, -4.89447]),
-    TOF=5,
-    psi_0=-0.1,
-    psi_upper=4 * math.pi**2,
-    psi_lower=-2,
-    M=50,
-    eps=1e-7,
-    tm=1,
-    mu=1
-)
-print(f'Final v1_vec = {v1_vec}')
-print(f'Final v2_vec = {v2_vec}')
-print(f'Final B = {B}, Final Chi = {chi}, Final Psi = {psi}\n')
+# # Parabolic Test Case
+# v1_vec, v2_vec, B, chi, psi, SMA = universal_lambert(
+#     np.array([-0.253513, 1.21614, -1.20916]),
+#     np.array([-0.434366, 4.92818, 0.0675545]),
+#     TOF=5,
+#     mu=1
+# )
+# print(f'Final v1_vec = {v1_vec}')
+# print(f'Final v2_vec = {v2_vec}')
+# print(f'Final B = {B}, Final Chi = {chi}, Final Psi = {psi}\n')

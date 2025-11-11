@@ -280,7 +280,7 @@ def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
         orbit_type = "Parabolic"
     print(f"Orbit is {orbit_type} with eccentricity {e:.10f}\n")
 
-    SMA = -mu/ (2 * ( .5*np.linalg.norm(v1_vec**2 - mu/r1)))
+    SMA = -mu/ (2 * ( .5*np.linalg.norm(v1_vec**2 )- mu/r1))
 
     if e > 1: 
       p = SMA*(e**2 -1)

@@ -84,11 +84,11 @@ v2_mars = mars_vs[-1]
 """
 Solving for lamberts.  
 """
-transfer_short.a, transfer_short.p, transfer_short.e, transfer_short_v1, transfer_short_v2 = lambert_solver(
+transfer_short.a, transfer_short.p, transfer_short.e, transfer_short_v1, transfer_short_v2 = universal_lambert(
     # type:ignore
     r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='short')
 
-transfer_long.a, transfer_long.p, transfer_long.e, transfer_long_v1, transfer_long_v2 = lambert_solver(
+transfer_long.a, transfer_long.p, transfer_long.e, transfer_long_v1, transfer_long_v2 = universal_lambert(
     # type:ignore
     r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='long')
 

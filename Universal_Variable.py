@@ -147,9 +147,9 @@ def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
     s = .5 * (r1+r2+c)
 
     if 0 <= delta_f < np.pi:
-        t_parab = 1/3 * np.sqrt(2/mu) * (s**3/2 - (s-c)**3/2)
+        t_parab = 1/3 * np.sqrt(2/mu) * (s**(3/2) - (s-c)**(3/2))
     else:
-        t_parab = 1/3 * np.sqrt(2/mu) * (s**3/2 + (s-c)**3/2)
+        t_parab = 1/3 * np.sqrt(2/mu) * (s**(3/2) + (s-c)**(3/2))
 
  # this is where I can set the psi values
     if TOF > t_parab:
@@ -163,9 +163,9 @@ def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
         psi_lower = -4 * math.pi**2
         print("Transfer Orbit is Parabolic")
     else:
-        psi_0 = 0.8
+        psi_0 = -0.1
         psi_upper = 4 * math.pi**2
-        psi_lower = -4 * math.pi**2
+        psi_lower = -2
         print("Transfer Orbit is Hyperbolic")
 
 #     alpha_m = np.pi
@@ -200,7 +200,13 @@ def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
 #     # e = np.sqrt(1 - (p/SMA))
 
     gamma = np.dot(r1_vec, r2_vec) / (r1 * r2)
-    A =  (r1 * r2 * (1 + gamma))**0.5
+
+    if desired_path == "short":
+        tm = 1
+    elif desired_path == "long":
+        tm = 1
+
+    A =  tm*(r1 * r2 * (1 + gamma))**0.5
 
     if abs(A) < 0:
         # this line was suggested by VS code: I was gonna have a print statement here

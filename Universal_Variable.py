@@ -128,6 +128,9 @@ if __name__ == "__main__":
 # full out lambert to solve for a 
 # first set up lamberts to solve for a,e,p then figure out way to mess with stumpff psi values, then fix to only input r1 r2 tof
 
+
+# import poliastro and check with their function --> verify with their example 
+# possibly work with izzo
 #--------------------------------------------------------------------------------------------------------------------
 def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
 
@@ -160,39 +163,41 @@ def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
         psi_lower = -4 * math.pi**2
         print("Transfer Orbit is Parabolic")
     else:
-        psi_0 = -0.1
+        psi_0 = 0.8
         psi_upper = 4 * math.pi**2
-        psi_lower = -2
+        psi_lower = -4 * math.pi**2
         print("Transfer Orbit is Hyperbolic")
 
-    alpha_m = np.pi
+#     alpha_m = np.pi
 
-    if 0 <= delta_f < np.pi:
-        beta_m = 2 * np.arcsin(np.sqrt( (s-c)/s))
-    else:
-        beta_m = -2* np.arcsin(np.sqrt( (s-c)/s))
+#     if 0 <= delta_f < np.pi:
+#         beta_m = 2 * np.arcsin(np.sqrt( (s-c)/s))
+#     else:
+#         beta_m = -2* np.arcsin(np.sqrt( (s-c)/s))
 
-    tm = np.sqrt(s**3/(8*mu)) * ( np.pi - beta_m + np.sin(beta_m))
+#     tm = np.sqrt(s**3/(8*mu)) * ( np.pi - beta_m + np.sin(beta_m))
 
-    if TOF <= tm:
-        def alpha(a): return 2*np.arcsin(np.sqrt(s/(2*a)))
-    else:   
-        def alpha(a): return 2*np.pi - 2*np.arcsin(np.sqrt(s/(2*a)))
+#     if TOF <= tm:
+#         def alpha(a): return 2*np.arcsin(np.sqrt(s/(2*a)))
+#     else:   
+#         def alpha(a): return 2*np.pi - 2*np.arcsin(np.sqrt(s/(2*a)))
 
-    if 0 <= delta_f < np.pi:
-        def beta(a): return 2*np.asin(np.sqrt((s-c)/(2*a)))
-    elif np.pi <= delta_f < 2*np.pi:
-        def beta(a): return -2*np.asin(np.sqrt((s-c)/(2*a)))
+#     if 0 <= delta_f < np.pi:
+#         def beta(a): return 2*np.asin(np.sqrt((s-c)/(2*a)))
+#     elif np.pi <= delta_f < 2*np.pi:
+#         def beta(a): return -2*np.asin(np.sqrt((s-c)/(2*a)))
     
-    # some way to solve IVP for a 
-    # solve a^3/2 * (alpha - sin(alpha) - Beta + sin(Beta)) - sqrt(mu) * (t2-t1) = 0 --> TOF = t2-t1
+#     # some way to solve IVP for a 
+#     # solve a^3/2 * (alpha - sin(alpha) - Beta + sin(Beta)) - sqrt(mu) * (t2-t1) = 0 --> TOF = t2-t1
 
-   # bisection method to solve for a
-    def lambert_eq(a): return ((np.sqrt(a**3)) * (alpha(a) - np.sin(alpha(a) ) - beta(a) + np.sin(beta(a)))) - ((np.sqrt(mu))*TOF)
-    SMA = optimize.brentq(lambert_eq, s/2, s/2 *100)
-    print(f"Semi Major Axis is {SMA} Meters")
-    p = (((4*SMA)*(s-r1)*(s-r2))/(c**2)) / (np.sin((alpha(SMA) + beta(SMA))/2)**2)  # type:ignore
-    # e = np.sqrt(1 - (p/SMA))
+#    # bisection method to solve for a
+#     def lambert_eq(a): return ((np.sqrt(a**3)) * (alpha(a) - np.sin(alpha(a) ) - beta(a) + np.sin(beta(a)))) - ((np.sqrt(mu))*TOF)
+#     SMA = optimize.brentq(lambert_eq, s/2, s/2 *100)
+
+#     print(f"Semi Major Axis is {SMA} Meters")
+
+#     p = (((4*SMA)*(s-r1)*(s-r2))/(c**2)) / (np.sin((alpha(SMA) + beta(SMA))/2)**2)  # type:ignore
+#     # e = np.sqrt(1 - (p/SMA))
 
     gamma = np.dot(r1_vec, r2_vec) / (r1 * r2)
     A =  (r1 * r2 * (1 + gamma))**0.5
@@ -273,7 +278,15 @@ def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
         orbit_type = "Hyperbolic"
     elif abs(e-1) < 10e-4:
         orbit_type = "Parabolic"
-    print(f"\nOrbit is {orbit_type} with eccentricity {e:.10f}")
+    print(f"Orbit is {orbit_type} with eccentricity {e:.10f}\n")
+
+    SMA = -mu/ (2 * ( .5*np.linalg.norm(v1_vec**2 - mu/r1)))
+
+    if e > 1: 
+      p = SMA*(e**2 -1)
+    else: 
+      p = SMA*(1-e**2)
+
 
     return SMA,p,e,v1_vec,v2_vec
 

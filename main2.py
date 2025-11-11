@@ -46,7 +46,7 @@ Using JPL data to get postion and velocity of earth and mars @ Depature
 """
 solar_system_ephemeris.set('de432s')  # Ephemeris from 1950 - 2050
 depature_date = Time("2026-11-08")
-tof = TimeDelta(100, format='jd')
+tof = TimeDelta(304, format='jd')
 arrival_date = depature_date + tof
 print(arrival_date)
 
@@ -92,9 +92,12 @@ transfer_long.a, transfer_long.p, transfer_long.e, transfer_long_v1, transfer_lo
     # type:ignore
     r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='long')
 
-print(f'semi major axis is {transfer_short.a}')
-print(f' semi major axis is {transfer_long.a}')
-print(f'  Eccentricity is  {transfer_long.e}')
+print(f'Short Transfer semi major axis is {transfer_short.a}')
+print(f'Long Transfer semi major axis is {transfer_long.a}')
+print(f' Short Transger Eccentricity is  {transfer_long.e}')
+print(f' Long Transger Eccentricity is  {transfer_long.e}')
+
+
 
 
 """

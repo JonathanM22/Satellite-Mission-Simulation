@@ -181,6 +181,8 @@ def y_dot(t, y, mu):
 def y_dot_n_body(t, y, central_body: Body, n_bodies: int, bodies: list[Body]):
     """
     N Body physics used for propagation cause im goated
+    Good cause it treats everything in the list as a body
+    Problem, treats everyging in the list as a body. 
     """
     y_dot = np.zeros(n_bodies*6)
 

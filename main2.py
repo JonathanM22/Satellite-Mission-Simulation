@@ -46,7 +46,7 @@ Using JPL data to get postion and velocity of earth and mars @ Depature
 """
 solar_system_ephemeris.set('de432s')  # Ephemeris from 1950 - 2050
 depature_date = Time("2026-11-08")
-tof = TimeDelta(304, format='jd')
+tof = TimeDelta(100, format='jd')
 arrival_date = depature_date + tof
 print(f'{arrival_date}\n')
 
@@ -85,18 +85,18 @@ v2_mars = mars_vs[-1]
 Solving for lamberts.  
 """
 print("Short Orbit Transfer")
-transfer_short.a, transfer_short.p, transfer_short.e, transfer_short_v1, transfer_short_v2 = universal_lambert(
+transfer_short.a, transfer_short.p, transfer_short.e, transfer_short_v1, transfer_short_v2 = lambert_solver(
     # type:ignore
     r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='short')
-print(f'Short Transfer semi major axis is {transfer_short.a/1000} km -->  {(transfer_short.a/1000/149597870.7)} AU \n')
-print(f'{transfer_short.e}')
+print(f'Short Transfer semi major axis is {transfer_short.a/1000} km -->  {(transfer_short.a/1000/149597870.7)} AU ')
+print(f'Short Transfer Eccentricity is: {transfer_short.e}\n')
 
 print("Long Orbit Transfer")
-transfer_long.a, transfer_long.p, transfer_long.e, transfer_long_v1, transfer_long_v2 = universal_lambert(
+transfer_long.a, transfer_long.p, transfer_long.e, transfer_long_v1, transfer_long_v2 = lambert_solver(
     # type:ignore
     r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='long')
-print(f'Long Transfer semi major axis is {transfer_long.a/1000} km --> {(transfer_long.a/1000/149597870.7)} AU\n')
-print(f'{transfer_long.e}')
+print(f'Long Transfer semi major axis is {transfer_long.a/1000} km --> {(transfer_long.a/1000/149597870.7)} AU')
+print(f'Long Transfer Eccentricity is: {transfer_long.e}')
 
 """
 Propogate transfer orbits

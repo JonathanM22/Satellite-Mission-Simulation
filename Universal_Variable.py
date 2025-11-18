@@ -140,33 +140,33 @@ def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
     if desired_path == 'short':
         delta_f = np.arccos((np.dot(r1_vec, r2_vec)) / (r1*r2))
     elif desired_path == 'long':
-        delta_f = (2*np.pi) - np.arccos((np.dot(r1_vec, r2_vec)) / (r1*r2))    
-            
-    c = np.sqrt(r1**2 + r2**2 - 2*r1*r2*np.cos(delta_f))
+        delta_f = (2*np.pi) - np.arccos((np.dot(r1_vec, r2_vec)) / (r1*r2))
+    # print(f'Delta F: {np.rad2deg(delta_f)} deg')
 
-    s = .5 * (r1+r2+c)
+    c = np.sqrt(r1**2 + r2**2 - 2*r1*r2*np.cos(delta_f)) 
+    s = (r1 + r2 + c) / 2
 
-    if 0 <= delta_f < np.pi:
-        t_parab = 1/3 * np.sqrt(2/mu) * (s**(3/2) - (s-c)**(3/2))
-    else:
-        t_parab = 1/3 * np.sqrt(2/mu) * (s**(3/2) + (s-c)**(3/2))
+    if 0 <= delta_f < np.pi:  
+        t_parab = (1/3) * np.sqrt(2/mu) * (s**(3/2) - ((s-c)**(3/2)))
+    elif np.pi <= delta_f < 2*np.pi:
+        t_parab = (1/3) * np.sqrt(2/mu) * (s**(3/2) + ((s-c)**(3/2)))
 
- # this is where I can set the psi values
+    # this is where I can set the psi values
     if TOF > t_parab:
         psi_0 = 0.8
         psi_upper = 4 * math.pi**2
         psi_lower = -4 * math.pi**2
-        print("Transfer Orbit is Elliptical")
+        # print("Transfer Orbit is Elliptical")
     elif TOF == t_parab:
         psi_0 = 0.8
         psi_upper = 4 * math.pi**2
         psi_lower = -4 * math.pi**2
-        print("Transfer Orbit is Parabolic")
+        # print("Transfer Orbit is Parabolic")
     else:
         psi_0 = -0.1
         psi_upper = 4 * math.pi**2
         psi_lower = -2
-        print("Transfer Orbit is Hyperbolic")
+        # print("Transfer Orbit is Hyperbolic")
 
 #     alpha_m = np.pi
 
@@ -204,7 +204,7 @@ def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
     if desired_path == "short":
         tm = 1
     elif desired_path == "long":
-        tm = 1
+        tm = -1
 
     A =  tm*(r1 * r2 * (1 + gamma))**0.5
 
@@ -238,7 +238,7 @@ def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
             C2, C3 = stumpff_C2_C3(psi, eps=eps, M=M)
             B = r1 + r2 + (1/np.sqrt(C2)) * (A * (psi * C3 - 1))
             ii += 1
-            print(psi_lower)
+            # print(psi_lower) gets hit if hyperbolic
             if ii == M:
                 raise ValueError(
                     "Failed to find a positive B value within maximum iterations.")
@@ -284,10 +284,10 @@ def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
         orbit_type = "Hyperbolic"
     elif abs(e-1) < 10e-4:
         orbit_type = "Parabolic"
-    print(f"Orbit is {orbit_type} with eccentricity {e:.10f}\n")
+    print(f"Orbit is {orbit_type} with eccentricity {e:.10f}")
 
-    SMA = -mu/ (2 * ( .5*np.linalg.norm(v1_vec**2 )- mu/r1))
-
+    # SMA = - mu / (2 * ( .5*np.linalg.norm(v2_vec**2 ) - (mu/r2)))
+    SMA = - mu / (2 * ( .5*np.linalg.norm(v1_vec**2 ) - (mu/r1)))
     if e > 1: 
       p = SMA*(e**2 -1)
     else: 

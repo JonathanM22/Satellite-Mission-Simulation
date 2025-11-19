@@ -84,19 +84,47 @@ v2_mars = mars_vs[-1]
 """
 Solving for lamberts.  
 """
+# print("JONS FUNCTION")
+# print("Short Orbit Transfer")
+# transfer_short.a, transfer_short.p, transfer_short.e, transfer_short_v1, transfer_short_v2 = lambert_solver(
+#     # type:ignore
+#     r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='short')
+# print(f'Short Transfer semi major axis is {transfer_short.a/1000} km -->  {(transfer_short.a/1000/149597870.7)} AU ')
+# print(f'Short Transfer Eccentricity is: {transfer_short.e}')
+# print(f'Departure velocity: {transfer_short_v1/1000} km/s')
+# print(f'Arrival velocity: {transfer_short_v2/1000} km/s\n')
+
+
+# print("Long Orbit Transfer")
+# transfer_long.a, transfer_long.p, transfer_long.e, transfer_long_v1, transfer_long_v2 = lambert_solver(
+#     # type:ignore
+#     r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='long')
+# print(f'Long Transfer semi major axis is {transfer_long.a/1000} km --> {(transfer_long.a/1000/149597870.7)} AU')
+# print(f'Long Transfer Eccentricity is: {transfer_long.e}')
+# print(f'Departure velocity: {transfer_long_v1/1000} km/s')
+# print(f'Arrival velocity: {transfer_long_v2/1000} km/s\n')
+
+
+print("VRAJ FUNCTION")
 print("Short Orbit Transfer")
-transfer_short.a, transfer_short.p, transfer_short.e, transfer_short_v1, transfer_short_v2 = lambert_solver(
+transfer_short.a, transfer_short.p, transfer_short.e, transfer_short_v1, transfer_short_v2 = universal_lambert(
     # type:ignore
     r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='short')
 print(f'Short Transfer semi major axis is {transfer_short.a/1000} km -->  {(transfer_short.a/1000/149597870.7)} AU ')
-print(f'Short Transfer Eccentricity is: {transfer_short.e}\n')
+print(f'Short Transfer Eccentricity is: {transfer_short.e}')
+print(f'Departure velocity: {transfer_short_v1/1000} km/s')
+print(f'Arrival velocity: {transfer_short_v2/1000} km/s\n')
+
 
 print("Long Orbit Transfer")
-transfer_long.a, transfer_long.p, transfer_long.e, transfer_long_v1, transfer_long_v2 = lambert_solver(
+transfer_long.a, transfer_long.p, transfer_long.e, transfer_long_v1, transfer_long_v2 = universal_lambert(
     # type:ignore
     r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='long')
 print(f'Long Transfer semi major axis is {transfer_long.a/1000} km --> {(transfer_long.a/1000/149597870.7)} AU')
 print(f'Long Transfer Eccentricity is: {transfer_long.e}')
+print(f'Departure velocity: {transfer_long_v1/1000} km/s')
+print(f'Arrival velocity: {transfer_long_v2/1000} km/s')
+
 
 """
 Propogate transfer orbits
@@ -107,6 +135,7 @@ transfer_short_rs, transfer_short_vs = propogate_orbit(
     transfer_r1, transfer_short_v1, transfer_short.mu, tspan=tof.sec, dt=dt)
 transfer_long_rs, transfer_long_vs = propogate_orbit(
     transfer_r1, transfer_long_v1, transfer_long.mu, tspan=tof.sec, dt=dt)
+
 
 """
 Calcs

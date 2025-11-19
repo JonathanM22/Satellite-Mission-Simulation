@@ -62,7 +62,7 @@ def lambert_solver(r1_vec, r2_vec, tof, mu, desired_path='short'):
 
         def lambert_eq(a): return ((np.sqrt(a**3)) * (alpha(a) - np.sin(alpha(a)) - beta(a) + np.sin(beta(a)))) - ((np.sqrt(mu))*tof)
 
-        a = optimize.brentq(lambert_eq, a_m, a_m*100)
+        a = optimize.brentq(lambert_eq, a_m, a_m*50)
         p = (((4*a)*(s-r1)*(s-r2))/(c**2)) * \
             (np.sin((alpha(a) + beta(a))/2)**2)  # type:ignore
         e = np.sqrt(1 - (p/a))

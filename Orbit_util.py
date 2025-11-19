@@ -54,24 +54,41 @@ def lambert_solver(r1_vec, r2_vec, tof, mu, desired_path='short'):
     tm = np.sqrt((s**3)/(8 * mu)) * \
         (np.pi - beta_m + np.sin(beta_m))  # type:ignore
 
+        # Solve for a, p and e
+    if tof > t_parab:
     # Define alpha and beta
-    if tof <= tm:
-        def alpha(a): return 2*np.arcsin(np.sqrt((s/(2*a))))
-    elif tof > tm:
-        def alpha(a): return 2*np.pi - 2*np.arcsin(np.sqrt((s/(2*a))))
+        if tof <= tm:
+            def alpha(a): return 2*np.arcsin(np.sqrt((s/(2*a))))
+        elif tof > tm:
+            def alpha(a): return 2*np.pi - 2*np.arcsin(np.sqrt((s/(2*a))))
 
-    if 0 <= delta_f < np.pi:  # type:ignore
-        def beta(a): return 2*np.arcsin(np.sqrt((s-c)/(2*a)))
-    elif np.pi <= delta_f < 2*np.pi:  # type:ignore
-        def beta(a): return -2*np.arcsin(np.sqrt((s-c)/(2*a)))
+        if 0 <= delta_f < np.pi:  # type:ignore
+            def beta(a): return 2*np.arcsin(np.sqrt((s-c)/(2*a)))
+        elif np.pi <= delta_f < 2*np.pi:  # type:ignore
+            def beta(a): return -2*np.arcsin(np.sqrt((s-c)/(2*a)))
 
-    # Solve for a, p and e
-    def lambert_eq(a): return ((np.sqrt(a**3)) * (alpha(a) - np.sin(alpha(a)
-                                                                    ) - beta(a) + np.sin(beta(a)))) - ((np.sqrt(mu))*tof)
-    a = optimize.brentq(lambert_eq, a_m, a_m*100)
-    p = (((4*a)*(s-r1)*(s-r2))/(c**2)) * \
-        (np.sin((alpha(a) + beta(a))/2)**2)  # type:ignore
-    e = np.sqrt(1 - (p/a))
+        def lambert_eq(a): return ((np.sqrt(a**3)) * (alpha(a) - np.sin(alpha(a)) - beta(a) + np.sin(beta(a)))) - ((np.sqrt(mu))*tof)
+
+        a = optimize.brentq(lambert_eq, a_m, a_m*100)
+        p = (((4*a)*(s-r1)*(s-r2))/(c**2)) * \
+            (np.sin((alpha(a) + beta(a))/2)**2)  # type:ignore
+        e = np.sqrt(1 - (p/a))
+
+    elif tof < t_parab: 
+
+        def alpha_h(a): return 2*np.arcsinh(np.sqrt(s/(-2*a)))
+        def beta_h(a): return 2*np.arcsinh(np.sqrt((s-c)/(-2*a)))
+
+        if 0 <= delta_f < np.pi:
+            def lambert_eq(a): return ((np.sqrt((-a)**3)) * (np.sinh(alpha_h(a)) - alpha_h(a) - np.sinh(beta_h(a)) + beta_h(a))) - (np.sqrt(mu)*tof)
+        elif np.pi <= delta_f < 2*np.pi:
+            def lambert_eq(a): return ((np.sqrt((-a)**3)) * (np.sinh(alpha_h(a)) - alpha_h(a) + np.sinh(beta_h(a)) - beta_h(a))) - (np.sqrt(mu)*tof)
+        
+        a = optimize.brentq(lambert_eq, -a_m*1000, -a_m)
+        p = (((4*(-a))*(s-r1)*(s-r2))/(c**2)) * \
+            (np.sinh((alpha_h(a) + beta_h(a))/2)**2)  # type:ignore
+        e = np.sqrt(1 - (p/a))
+
 
     # Calculate v1 @ r1 and v2 @ r2
     # Calc unit vectors
@@ -79,8 +96,12 @@ def lambert_solver(r1_vec, r2_vec, tof, mu, desired_path='short'):
     u2 = r2_vec / r2
     uc = (r2_vec - r1_vec) / c
 
-    A = np.sqrt(mu/(4*a))*(1/np.tan(alpha(a)/2))  # type:ignore
-    B = np.sqrt(mu/(4*a))*(1/np.tan(beta(a)/2))  # type:ignore
+    if tof > t_parab:  # Elliptical
+        A = np.sqrt(mu/(4*a))*(1/np.tan(alpha(a)/2))
+        B = np.sqrt(mu/(4*a))*(1/np.tan(beta(a)/2))
+    else:  # Hyperbolic
+        A = np.sqrt(mu/(4*(-a)))*(1/np.tanh(alpha_h(a)/2))
+        B = np.sqrt(mu/(4*(-a)))*(1/np.tanh(beta_h(a)/2))
 
     v1 = (B+A)*uc + (B-A)*u1
     v2 = (B+A)*uc - (B-A)*u2
@@ -216,26 +237,26 @@ def y_dot_n_body(t, y, central_body: Body, n_bodies: int, bodies: list[Body]):
 
     return y_dot
 
-    def y_dot_n_body_SC(t, y, central_body: Body, central_bodies: list[Body], km=False):
-        """
-        N Body physics used for propagation for space-craft. Only propgates s/c body with a given list of celestial bodies. 
-        """
-        if km == True:
-            G = 6.674 * 10**-9  # km^3 kg^-1 s^-2
-        else:
-            G = 6.674 * 10**-11  # m^3 kg^-1 s^-2
+    # def y_dot_n_body_SC(t, y, central_body: Body, central_bodies: list[Body], km=False):
+    #     """
+    #     N Body physics used for propagation for space-craft. Only propgates s/c body with a given list of celestial bodies. 
+    #     """
+    #     if km == True:
+    #         G = 6.674 * 10**-9  # km^3 kg^-1 s^-2
+    #     else:
+    #         G = 6.674 * 10**-11  # m^3 kg^-1 s^-2
 
-        y_dot = np.zeros(6)
-        # ignore git test
-        r_sc = y[0:3]
-        r_sc_mag = np.linalg.norm(r_sc)
-        v_sc = y[3:6]
+    #     y_dot = np.zeros(6)
+    #     # ignore git test
+    #     r_sc = y[0:3]
+    #     r_sc_mag = np.linalg.norm(r_sc)
+    #     v_sc = y[3:6]
 
-        a_sc = ((-G*central_body.mass)/(r_sc_mag**3))*r_sc
+    #     a_sc = ((-G*central_body.mass)/(r_sc_mag**3))*r_sc
 
-        for body in bodies:
+    #     for body in bodies:
 
-    return y_dot
+    # return y_dot
 
 
 def rv_2_orb_elm(r, v, mu):

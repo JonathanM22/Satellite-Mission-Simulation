@@ -141,8 +141,8 @@ def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
         delta_f = np.arccos((np.dot(r1_vec, r2_vec)) / (r1*r2))
     elif desired_path == 'long':
         delta_f = (2*np.pi) - np.arccos((np.dot(r1_vec, r2_vec)) / (r1*r2))
-    # print(f'Delta F: {np.rad2deg(delta_f)} deg')
-
+    print(f'Delta F: {np.rad2deg(delta_f)} deg')
+    
     c = np.sqrt(r1**2 + r2**2 - 2*r1*r2*np.cos(delta_f)) 
     s = (r1 + r2 + c) / 2
 
@@ -270,10 +270,8 @@ def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
     G = A * np.sqrt(B/mu)
     G_dot = 1 - B/r2
 
-    v1_vec = 1/G * np.array([r2_vec[0] - F * r1_vec[0],
-                            r2_vec[1] - F * r1_vec[1], r2_vec[2] - F * r1_vec[2]])
-    v2_vec = 1/G * np.array([G_dot * r2_vec[0] - r1_vec[0], G_dot *
-                            r2_vec[1] - r1_vec[1], G_dot * r2_vec[2] - r1_vec[2]])
+    v1_vec = 1/G * np.array([r2_vec[0] - F * r1_vec[0], r2_vec[1] - F * r1_vec[1], r2_vec[2] - F * r1_vec[2]])
+    v2_vec = 1/G * np.array([G_dot * r2_vec[0] - r1_vec[0], G_dot * r2_vec[1] - r1_vec[1], G_dot * r2_vec[2] - r1_vec[2]])
 
     h = np.cross(r1_vec, v1_vec)
     e = np.linalg.norm(np.cross(v1_vec, h)/mu - r1_vec/r1)
@@ -284,14 +282,11 @@ def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
         orbit_type = "Hyperbolic"
     elif abs(e-1) < 10e-4:
         orbit_type = "Parabolic"
-    print(f"Orbit is {orbit_type} with eccentricity {e:.10f}")
+    # print(f"Orbit is {orbit_type} with eccentricity {e:.10f}")
 
     # SMA = - mu / (2 * ( .5*np.linalg.norm(v2_vec**2 ) - (mu/r2)))
     SMA = - mu / (2 * ( .5*np.linalg.norm(v1_vec**2 ) - (mu/r1)))
-    if e > 1: 
-      p = SMA*(e**2 -1)
-    else: 
-      p = SMA*(1-e**2)
+    p = SMA*(1-e**2)
 
 
     return SMA,p,e,v1_vec,v2_vec

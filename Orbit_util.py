@@ -21,6 +21,7 @@ def lambert_solver(r1_vec, r2_vec, tof, mu, desired_path='short'):
         delta_f = np.arccos((np.dot(r1_vec, r2_vec)) / (r1*r2))
     elif desired_path == 'long':
         delta_f = (2*np.pi) - np.arccos((np.dot(r1_vec, r2_vec)) / (r1*r2))
+    print(f'Delta F: {np.rad2deg(delta_f)} deg')
 
     # Calc chord and space triangel perimeter
     c = np.sqrt(r1**2 + r2**2 - 2*r1*r2*np.cos(delta_f))  # type:ignore
@@ -31,17 +32,6 @@ def lambert_solver(r1_vec, r2_vec, tof, mu, desired_path='short'):
         t_parab = (1/3) * np.sqrt(2/mu) * (s**(3/2) - ((s-c)**(3/2)))
     elif np.pi <= delta_f < 2*np.pi:  # type:ignore
         t_parab = (1/3) * np.sqrt(2/mu) * (s**(3/2) + ((s-c)**(3/2)))
-
-    if tof > t_parab:  # type:ignore
-        # print("elliptical solution")
-        pass
-    else:
-        print('hyperbolic solution')
-        print(f"{r1_vec}")
-        print(f"{r2_vec}")
-
-        # ValueError('Hyperbolic Solution')
-        return None
 
     # Calculate minumum transfer
     a_m = s/2
@@ -54,8 +44,9 @@ def lambert_solver(r1_vec, r2_vec, tof, mu, desired_path='short'):
     tm = np.sqrt((s**3)/(8 * mu)) * \
         (np.pi - beta_m + np.sin(beta_m))  # type:ignore
 
-        # Solve for a, p and e
-    if tof > t_parab:
+
+ # Solve for a, p and e
+    if tof > t_parab: # elliptical case
     # Define alpha and beta
         if tof <= tm:
             def alpha(a): return 2*np.arcsin(np.sqrt((s/(2*a))))
@@ -70,11 +61,10 @@ def lambert_solver(r1_vec, r2_vec, tof, mu, desired_path='short'):
         def lambert_eq(a): return ((np.sqrt(a**3)) * (alpha(a) - np.sin(alpha(a)) - beta(a) + np.sin(beta(a)))) - ((np.sqrt(mu))*tof)
 
         a = optimize.brentq(lambert_eq, a_m, a_m*100)
-        p = (((4*a)*(s-r1)*(s-r2))/(c**2)) * \
-            (np.sin((alpha(a) + beta(a))/2)**2)  # type:ignore
+        p = (((4*a)*(s-r1)*(s-r2))/(c**2)) * (np.sin((alpha(a) + beta(a))/2)**2)  
         e = np.sqrt(1 - (p/a))
 
-    elif tof < t_parab: 
+    elif tof < t_parab: # hyperbolic case
 
         def alpha_h(a): return 2*np.arcsinh(np.sqrt(s/(-2*a)))
         def beta_h(a): return 2*np.arcsinh(np.sqrt((s-c)/(-2*a)))
@@ -85,8 +75,7 @@ def lambert_solver(r1_vec, r2_vec, tof, mu, desired_path='short'):
             def lambert_eq(a): return ((np.sqrt((-a)**3)) * (np.sinh(alpha_h(a)) - alpha_h(a) + np.sinh(beta_h(a)) - beta_h(a))) - (np.sqrt(mu)*tof)
         
         a = optimize.brentq(lambert_eq, -a_m*1000, -a_m)
-        p = (((4*(-a))*(s-r1)*(s-r2))/(c**2)) * \
-            (np.sinh((alpha_h(a) + beta_h(a))/2)**2)  # type:ignore
+        p = (((4*(-a))*(s-r1)*(s-r2))/(c**2)) * (np.sinh((alpha_h(a) + beta_h(a))/2)**2) 
         e = np.sqrt(1 - (p/a))
 
 

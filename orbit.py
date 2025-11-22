@@ -9,27 +9,29 @@ from scipy import optimize
 class Orbit:
     """
     Intializes orbit class with 6 orbital elements. 
+
+    e: vector
+    e_mag: magnitude 
     """
 
-    def __init__(self, mu, a=None, e=None, f0=None, inc=None, raan=None, aop=None, degrees=True):
+    def __init__(self, mu, a=None, e=None, f0=None, inc=None, raan=None, aop=None, e_vec=np.zeros(3)):
         self.a = a
         self.e = e
-        self.inc = np.deg2rad(inc) if (inc is not None and degrees) else inc
-        self.raan = np.deg2rad(raan) if (
-            raan is not None and degrees) else raan
-        self.aop = np.deg2rad(aop) if (aop is not None and degrees) else aop
+        self.f0 = f0
+        self.e_vec = e_vec
+        self.inc = inc
+        self.raan = raan
+        self.aop = aop
         self.mu = mu
         self.h = np.zeros(2)
         self.p = None
         self.energy = None
 
-    def r_at_true_anomaly(self, f, degrees=True):
+    def r_at_true_anomaly(self, f):
         """
         Returns r scalor using orbit equation 
         """
         try:
-            if degrees:
-                f = np.deg2rad(f)
             return self.calc_p() / (1 + self.e*np.cos(f))
         except:
             raise ValueError(

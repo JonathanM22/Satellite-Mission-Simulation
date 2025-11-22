@@ -5,6 +5,7 @@ from scipy import optimize
 import matplotlib.pyplot as plt
 from body import Body
 from astropy import constants as const
+from astropy import units as u
 
 
 def lambert_solver(r1_vec, r2_vec, tof, mu, desired_path='short'):
@@ -44,10 +45,9 @@ def lambert_solver(r1_vec, r2_vec, tof, mu, desired_path='short'):
     tm = np.sqrt((s**3)/(8 * mu)) * \
         (np.pi - beta_m + np.sin(beta_m))  # type:ignore
 
-
  # Solve for a, p and e
-    if tof > t_parab: # elliptical case
-    # Define alpha and beta
+    if tof > t_parab:  # elliptical case
+        # Define alpha and beta
         if tof <= tm:
             def alpha(a): return 2*np.arcsin(np.sqrt((s/(2*a))))
         elif tof > tm:
@@ -58,26 +58,30 @@ def lambert_solver(r1_vec, r2_vec, tof, mu, desired_path='short'):
         elif np.pi <= delta_f < 2*np.pi:  # type:ignore
             def beta(a): return -2*np.arcsin(np.sqrt((s-c)/(2*a)))
 
-        def lambert_eq(a): return ((np.sqrt(a**3)) * (alpha(a) - np.sin(alpha(a)) - beta(a) + np.sin(beta(a)))) - ((np.sqrt(mu))*tof)
+        def lambert_eq(a): return ((np.sqrt(a**3)) * (alpha(a) -
+                                                      np.sin(alpha(a)) - beta(a) + np.sin(beta(a)))) - ((np.sqrt(mu))*tof)
 
         a = optimize.brentq(lambert_eq, a_m, a_m*100)
-        p = (((4*a)*(s-r1)*(s-r2))/(c**2)) * (np.sin((alpha(a) + beta(a))/2)**2)  
+        p = (((4*a)*(s-r1)*(s-r2))/(c**2)) * \
+            (np.sin((alpha(a) + beta(a))/2)**2)
         e = np.sqrt(1 - (p/a))
 
-    elif tof < t_parab: # hyperbolic case
+    elif tof < t_parab:  # hyperbolic case
 
         def alpha_h(a): return 2*np.arcsinh(np.sqrt(s/(-2*a)))
         def beta_h(a): return 2*np.arcsinh(np.sqrt((s-c)/(-2*a)))
 
         if 0 <= delta_f < np.pi:
-            def lambert_eq(a): return ((np.sqrt((-a)**3)) * (np.sinh(alpha_h(a)) - alpha_h(a) - np.sinh(beta_h(a)) + beta_h(a))) - (np.sqrt(mu)*tof)
+            def lambert_eq(a): return ((np.sqrt((-a)**3)) * (np.sinh(alpha_h(a)) -
+                                                             alpha_h(a) - np.sinh(beta_h(a)) + beta_h(a))) - (np.sqrt(mu)*tof)
         elif np.pi <= delta_f < 2*np.pi:
-            def lambert_eq(a): return ((np.sqrt((-a)**3)) * (np.sinh(alpha_h(a)) - alpha_h(a) + np.sinh(beta_h(a)) - beta_h(a))) - (np.sqrt(mu)*tof)
-        
-        a = optimize.brentq(lambert_eq, -a_m*1000, -a_m)
-        p = (((4*(-a))*(s-r1)*(s-r2))/(c**2)) * (np.sinh((alpha_h(a) + beta_h(a))/2)**2) 
-        e = np.sqrt(1 - (p/a))
+            def lambert_eq(a): return ((np.sqrt((-a)**3)) * (np.sinh(alpha_h(a)) -
+                                                             alpha_h(a) + np.sinh(beta_h(a)) - beta_h(a))) - (np.sqrt(mu)*tof)
 
+        a = optimize.brentq(lambert_eq, -a_m*1000, -a_m)
+        p = (((4*(-a))*(s-r1)*(s-r2))/(c**2)) * \
+            (np.sinh((alpha_h(a) + beta_h(a))/2)**2)
+        e = np.sqrt(1 - (p/a))
 
     # Calculate v1 @ r1 and v2 @ r2
     # Calc unit vectors
@@ -131,15 +135,11 @@ def propogate_orbit(r, v, mu, tspan, dt):
     return (rs, vs)
 
 
-def orb_2_pqw(r, f, e, p, mu, degrees=True):
+def orb_2_pqw(r, f, e, p, mu):
     """
     Transforms orbital frame to perifocal frame
     """
-    if degrees:
-        f = np.deg2rad(f)
-    else:
-        pass
-    r_pqw = np.array([r*np.cos(f), r*np.sin(f), 0])
+    r_pqw = np.array([r*np.cos(f), r*np.sin(f), r*0])
     v_pqw = np.array(
         [-np.sqrt(mu/p)*np.sin(f), np.sqrt(mu/p)*(e + np.cos(f)), 0])
 
@@ -179,6 +179,7 @@ def y_dot(t, y, mu):
     """
     # print(y)
     rx, ry, rz, vx, vy, vz = y  # Deconstruct State to get r_vec
+    print(t)
     r = np.array([rx, ry, rz])
     r_norm = np.linalg.norm(r)
     ax, ay, az = -r*mu/r_norm**3  # Two body Problem ODE
@@ -228,7 +229,7 @@ def y_dot_n_body(t, y, central_body: Body, n_bodies: int, bodies: list[Body]):
 
     # def y_dot_n_body_SC(t, y, central_body: Body, central_bodies: list[Body], km=False):
     #     """
-    #     N Body physics used for propagation for space-craft. Only propgates s/c body with a given list of celestial bodies. 
+    #     N Body physics used for propagation for space-craft. Only propgates s/c body with a given list of celestial bodies.
     #     """
     #     if km == True:
     #         G = 6.674 * 10**-9  # km^3 kg^-1 s^-2

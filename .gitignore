@@ -1,1 +1,5 @@
 /ISS-Payload-Mission-Simulation.code-workspace
+/__pycache__/Universal_Variable.cpython-312.pyc
+/__pycache__/body.cpython-312.pyc
+/__pycache__/orbit.cpython-312.pyc
+/__pycache__/orbit_util.cpython-312.pyc

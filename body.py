@@ -15,29 +15,37 @@ from astropy.coordinates import get_body_barycentric_posvel
 
 class Body:
 
-    def __init__(self, mass, epoch, r0=0, v0=0, celestial_body=None, label=None, color=None):
+    def __init__(self, mass, epoch, r0=0, v0=0, celestial_body=False, label='unlabeled', color='black'):
         self.mass = mass
         self.epoch = epoch
-        self.r_ar = []
-        self.v_ar = []
-        self.energy_ar = []
+        self.r_ar = []  # position array
+        self.v_ar = []  # velocity array
+        self.t_ar = []  # time array
 
         # Atr mostly for plotting
         self.label = label
         self.color = color
 
-        if celestial_body != None:
+        if celestial_body != False:
             solar_system_ephemeris.set('de432s')
             self.label = celestial_body
+            r, v = get_body_barycentric_posvel(
+                celestial_body, epoch)
 
-            # Position of Sun @ epoch
-            r_sun1, v_sun1 = get_body_barycentric_posvel('sun', epoch)
-
-            r, v = get_body_barycentric_posvel(celestial_body, epoch)
-
-            # Position & Velocity of earth respect to sun @ epoch
-            self.r0 = (r.xyz - r_sun1.xyz).to(u.m).value   # type: ignore
-            self.v0 = (v.xyz - v_sun1.xyz).to(u.m/u.s).value  # type: ignore
-        if celestial_body == None:
+            self.r0 = r.xyz.to(u.km)
+            self.v0 = v.xyz.to(u.km/u.s)
+        else:
             self.r0 = r0
             self.v0 = v0
+
+
+class Spacecraft(Body):
+
+    def __init__(self, mass, epoch, r0=0, v0=0, celestial_body=False, label=None, color=None):
+        super().__init__(mass, epoch, r0=0, v0=0,
+                         celestial_body=False, label=None, color=None)
+
+        self.inertia = np.zeros((3, 3))
+        self.energy_ar = []
+        self.h_ar = []
+        self.central_body = None

@@ -136,8 +136,9 @@ def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
 
     r1 = np.linalg.norm(r1_vec)
     r2 = np.linalg.norm(r2_vec)
-    actual_angle = np.arccos(np.dot(r1_vec, r2_vec) / (r1 * r2))
-    print(f'Actual angle between position vectors: {np.rad2deg(actual_angle):.2f} deg')
+    
+    # actual_angle = np.arccos(np.dot(r1_vec, r2_vec) / (r1 * r2))
+    # print(f'Actual angle between position vectors: {np.rad2deg(actual_angle):.2f} deg')
 
     if desired_path == 'short':
         delta_f = np.arccos((np.dot(r1_vec, r2_vec)) / (r1*r2))
@@ -171,50 +172,50 @@ def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
         # print("Transfer Orbit is Hyperbolic")
 
 #     
-    # Calculate minumum transfer
-    a_m = s/2
-    alpha_m = np.pi
-    if 0 <= delta_f < np.pi:  # type:ignore
-        beta_m = 2*np.arcsin(np.sqrt((s-c)/s))
-    elif np.pi <= delta_f < 2*np.pi:  # type:ignore
-        beta_m = -2*np.arcsin(np.sqrt((s-c)/s))
+#     # Calculate minumum transfer
+#     a_m = s/2
+#     alpha_m = np.pi
+#     if 0 <= delta_f < np.pi:  # type:ignore
+#         beta_m = 2*np.arcsin(np.sqrt((s-c)/s))
+#     elif np.pi <= delta_f < 2*np.pi:  # type:ignore
+#         beta_m = -2*np.arcsin(np.sqrt((s-c)/s))
 
-    tm = np.sqrt((s**3)/(8 * mu)) * \
-        (np.pi - beta_m + np.sin(beta_m))  # type:ignore
+#     tm = np.sqrt((s**3)/(8 * mu)) * \
+#         (np.pi - beta_m + np.sin(beta_m))  # type:ignore
 
 
- # Solve for a, p and e
-    if TOF > t_parab: # elliptical case
-    # Define alpha and beta
-        if TOF <= tm:
-            def alpha(a): return 2*np.arcsin(np.sqrt((s/(2*a))))
-        elif TOF > tm:
-            def alpha(a): return 2*np.pi - 2*np.arcsin(np.sqrt((s/(2*a))))
+#  # Solve for a, p and e
+#     if TOF > t_parab: # elliptical case
+#     # Define alpha and beta
+#         if TOF <= tm:
+#             def alpha(a): return 2*np.arcsin(np.sqrt((s/(2*a))))
+#         elif TOF > tm:
+#             def alpha(a): return 2*np.pi - 2*np.arcsin(np.sqrt((s/(2*a))))
 
-        if 0 <= delta_f < np.pi:  # type:ignore
-            def beta(a): return 2*np.arcsin(np.sqrt((s-c)/(2*a)))
-        elif np.pi <= delta_f < 2*np.pi:  # type:ignore
-            def beta(a): return -2*np.arcsin(np.sqrt((s-c)/(2*a)))
+#         if 0 <= delta_f < np.pi:  # type:ignore
+#             def beta(a): return 2*np.arcsin(np.sqrt((s-c)/(2*a)))
+#         elif np.pi <= delta_f < 2*np.pi:  # type:ignore
+#             def beta(a): return -2*np.arcsin(np.sqrt((s-c)/(2*a)))
 
-        def lambert_eq(a): return ((np.sqrt(a**3)) * (alpha(a) - np.sin(alpha(a)) - beta(a) + np.sin(beta(a)))) - ((np.sqrt(mu))*TOF)
+#         def lambert_eq(a): return ((np.sqrt(a**3)) * (alpha(a) - np.sin(alpha(a)) - beta(a) + np.sin(beta(a)))) - ((np.sqrt(mu))*TOF)
 
-        a = optimize.brentq(lambert_eq, a_m, a_m*100)
-        p = (((4*a)*(s-r1)*(s-r2))/(c**2)) * (np.sin((alpha(a) + beta(a))/2)**2)  
-        e = np.sqrt(1 - (p/a))
+#         a = optimize.brentq(lambert_eq, a_m, a_m*100)
+#         p = (((4*a)*(s-r1)*(s-r2))/(c**2)) * (np.sin((alpha(a) + beta(a))/2)**2)  
+#         e = np.sqrt(1 - (p/a))
 
-    elif TOF < t_parab: # hyperbolic case
+#     elif TOF < t_parab: # hyperbolic case
 
-        def alpha_h(a): return 2*np.arcsinh(np.sqrt(s/(-2*a)))
-        def beta_h(a): return 2*np.arcsinh(np.sqrt((s-c)/(-2*a)))
+#         def alpha_h(a): return 2*np.arcsinh(np.sqrt(s/(-2*a)))
+#         def beta_h(a): return 2*np.arcsinh(np.sqrt((s-c)/(-2*a)))
 
-        if 0 <= delta_f < np.pi:
-            def lambert_eq(a): return ((np.sqrt((-a)**3)) * (np.sinh(alpha_h(a)) - alpha_h(a) - np.sinh(beta_h(a)) + beta_h(a))) - (np.sqrt(mu)*TOF)
-        elif np.pi <= delta_f < 2*np.pi:
-            def lambert_eq(a): return ((np.sqrt((-a)**3)) * (np.sinh(alpha_h(a)) - alpha_h(a) + np.sinh(beta_h(a)) - beta_h(a))) - (np.sqrt(mu)*TOF)
+#         if 0 <= delta_f < np.pi:
+#             def lambert_eq(a): return ((np.sqrt((-a)**3)) * (np.sinh(alpha_h(a)) - alpha_h(a) - np.sinh(beta_h(a)) + beta_h(a))) - (np.sqrt(mu)*TOF)
+#         elif np.pi <= delta_f < 2*np.pi:
+#             def lambert_eq(a): return ((np.sqrt((-a)**3)) * (np.sinh(alpha_h(a)) - alpha_h(a) + np.sinh(beta_h(a)) - beta_h(a))) - (np.sqrt(mu)*TOF)
         
-        a = optimize.brentq(lambert_eq, -a_m*1000, -a_m)
-        p = (((4*(-a))*(s-r1)*(s-r2))/(c**2)) * (np.sinh((alpha_h(a) + beta_h(a))/2)**2) 
-        e = np.sqrt(1 - (p/a))
+#         a = optimize.brentq(lambert_eq, -a_m*1000, -a_m)
+#         p = (((4*(-a))*(s-r1)*(s-r2))/(c**2)) * (np.sinh((alpha_h(a) + beta_h(a))/2)**2) 
+#         e = np.sqrt(1 - (p/a))
 
     gamma = np.dot(r1_vec, r2_vec) / (r1 * r2)
 
@@ -283,20 +284,20 @@ def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
     v1_vec = 1/G * np.array([r2_vec[0] - F * r1_vec[0], r2_vec[1] - F * r1_vec[1], r2_vec[2] - F * r1_vec[2]])
     v2_vec = 1/G * np.array([G_dot * r2_vec[0] - r1_vec[0], G_dot * r2_vec[1] - r1_vec[1], G_dot * r2_vec[2] - r1_vec[2]])
 
-    # h = np.cross(r1_vec, v1_vec)
-    # e = np.linalg.norm(np.cross(v1_vec, h)/mu - r1_vec/r1)
+    h = np.cross(r1_vec, v1_vec)
+    e = np.linalg.norm((np.cross(v1_vec, h)/mu) - (r1_vec/r1))
 
-    # if e < 1-eps:
-    #     orbit_type = "Elliptic"
-    # elif abs(e-1) > 10e-4:
-    #     orbit_type = "Hyperbolic"
-    # elif abs(e-1) < 10e-4:
-    #     orbit_type = "Parabolic"
-    # # print(f"Orbit is {orbit_type} with eccentricity {e:.10f}")
+    if e < 1-eps:
+        orbit_type = "Elliptic"
+    elif abs(e-1) > 10e-4:
+        orbit_type = "Hyperbolic"
+    elif abs(e-1) < 10e-4:
+        orbit_type = "Parabolic"
+    # print(f"Orbit is {orbit_type} with eccentricity {e:.10f}")
 
-    # # SMA = - mu / (2 * ( .5*np.linalg.norm(v2_vec**2 ) - (mu/r2)))
-    # a = - mu / (2 * ( .5*np.linalg.norm(v1_vec**2 ) - (mu/r1)))
-    # p = a*(1-e**2)
+    # SMA = - mu / (2 * ( .5*np.linalg.norm(v2_vec**2 ) - (mu/r2)))
+    a = - mu / (2 * ( .5*np.linalg.norm(v1_vec)**2 - (mu/r1)))
+    p = a*(1-e**2)
 
 
     return a,p,e,v1_vec,v2_vec

@@ -128,6 +128,7 @@ def propogate_orbit(r, v, mu, tspan, dt):
         ts[step] = solver.t
         ys[step] = solver.y
         step += 1
+        print(f'STEP:{step} | Time: {solver.t}')
 
     rs = ys[:, :3]
     vs = ys[:, 3:6]
@@ -179,7 +180,6 @@ def y_dot(t, y, mu):
     """
     # print(y)
     rx, ry, rz, vx, vy, vz = y  # Deconstruct State to get r_vec
-    print(t)
     r = np.array([rx, ry, rz])
     r_norm = np.linalg.norm(r)
     ax, ay, az = -r*mu/r_norm**3  # Two body Problem ODE

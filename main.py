@@ -55,9 +55,9 @@ plot = True
 if plot == True:
     """- - - - - - - - - - - - - - - -PLOTTING- - - - - - - - - - - - - - - -"""
     earth_rs, earth_vs = propogate_orbit(
-        r1_eci, v1_eci, earth.mu, tspan=earth.period(), dt=86400)
+        r1_eci, v1_eci, earth.mu, tspan=earth.period(earth.a, earth.mu), dt=86400)
     mars_rs, mars_vs = propogate_orbit(
-        r2_eci, v2_eci, mars.mu, tspan=mars.period(), dt=86400)
+        r2_eci, v2_eci, mars.mu, tspan=mars.period(mars.a, mars.mu), dt=86400)
     transfer_rs, transfer_vs = propogate_orbit(
         transfer_r1, transfer_v1, transfer.mu, tspan=TOF, dt=86400)
 

@@ -37,7 +37,7 @@ class Body:
         else:
             self.r0 = r0
             self.v0 = v0
-    
+
 
 class Spacecraft(Body):
 

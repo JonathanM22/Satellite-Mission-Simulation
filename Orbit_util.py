@@ -128,7 +128,6 @@ def propogate_orbit(r, v, mu, tspan, dt):
         ts[step] = solver.t
         ys[step] = solver.y
         step += 1
-        print(f'STEP:{step} | Time: {solver.t}')
 
     rs = ys[:, :3]
     vs = ys[:, 3:6]
@@ -174,12 +173,63 @@ def perif_2_eci(r_pqw, v_pqw, inc, raan, aop):
     return r_eci, v_eci
 
 
+def rv_2_orb_elm(r, v, mu):
+    """
+    Given an r, v vectors and mu of a orbit, calculates all orbital elements. 
+    Based on 458 notes 2/10
+    """
+    I = [1, 0, 0]
+    J = [0, 1, 0]
+    K = [0, 0, 1]
+
+    r_mag = np.linalg.norm(r)
+    v_mag = np.linalg.norm(v)
+
+    energy = ((v_mag**2) / 2) - (mu/r_mag)
+    a = -mu/(2*energy)
+
+    h_vec = np.cross(r, v)
+    h = np.linalg.norm(h_vec)
+
+    e_vec = (np.cross(v, h_vec)/mu) - (r/r_mag)
+    e = np.linalg.norm(e_vec)
+
+    cos_i = np.dot(K, h_vec) / h
+    i = np.arccos(cos_i)
+
+    # Numpy has a special atan2, not using because we do a quad check?
+    Kxh = np.cross(K, h_vec)
+    n = (Kxh)/(np.linalg.norm(Kxh))
+
+    raan = np.arctan((np.dot(J, n) / np.dot(I, n)))
+
+    rann_quad_check = np.dot(n, I)
+    if rann_quad_check < 0:
+        raan += np.pi
+
+    # aop quad check
+    aop = np.arccos((np.dot(e_vec, n))/e)
+
+    aop_quad_check = np.dot(e_vec, K)
+    if aop_quad_check < 0:
+        aop = (2*np.pi) - aop
+
+    f = np.arccos(np.dot(e_vec, r)/(e*r_mag))
+
+    radial_v = np.dot(r, (v/r_mag))
+    if radial_v < 0:
+        f = (2*np.pi) - f
+
+    return a, e, e_vec, i, raan, aop, f
+
+
 def y_dot(t, y, mu):
     """
     Two Body physics used for propagation
     """
     # print(y)
     rx, ry, rz, vx, vy, vz = y  # Deconstruct State to get r_vec
+    print(t)
     r = np.array([rx, ry, rz])
     r_norm = np.linalg.norm(r)
     ax, ay, az = -r*mu/r_norm**3  # Two body Problem ODE
@@ -247,52 +297,3 @@ def y_dot_n_body(t, y, central_body: Body, n_bodies: int, bodies: list[Body]):
     #     for body in bodies:
 
     # return y_dot
-
-
-def rv_2_orb_elm(r, v, mu):
-    """
-    Given an r, v vectors and mu of a orbit, calculates all orbital elements. 
-    Based on 458 notes 2/10
-    """
-
-    r_mag = np.linalg.norm(r)
-    v_mag = np.linald.norm(v)
-
-    energy = ((v**2) / 2) - (mu/r_mag)
-    a = -mu/(2*energy)
-
-    h = np.cross(r, v)
-    h_mag = np.linalg.norm(h)
-
-    e = (np.cross(v, h)/mu) - (r/r_mag)
-    e_mag = np.linalg.norm(e)
-    k = [0, 0, 1]
-
-    # No quad check for i
-    cos_i = np.dot(k, h) / h_mag
-    i = np.arccos(cos_i)
-
-    # No quad check for RAAN
-    I = [1, 0, 0]
-    J = [0, 1, 0]
-
-    # Numpy has a special atan2, not using because we do a quad check?
-    n = (np.cross(k, h))/(np.linalg.norm(np.cross(k, h)))
-
-    raan = np.arctan((np.dot(J, n) / np.dot(I, n)))
-
-    rann_quad_check = np.dot(n, I)
-    if rann_quad_check < 0:
-        raan += np.pi
-
-    # aop quad check
-    aop = np.arccos((np.dot(e, n))/e_mag)
-
-    aop_quad_check = np.dot(e, k)
-    if aop_quad_check < 0:
-        aop *= -1
-
-    if aop < 0:
-        aop += (2*np.pi)
-
-    return a, e, e_mag, i, raan, aop

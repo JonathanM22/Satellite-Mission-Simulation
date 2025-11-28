@@ -112,10 +112,10 @@ print("Short Orbit Transfer")
 print(f"Departure velocity: {v1_short}")
 print(f"Arrival velocity: {v2_short}\n")
 
-(v1_short, v2_short),= vallado.lambert(k, r1_earth*u.m, r2_mars*u.m , (tof.sec*u.s),short=False)
+(v1_long, v2_long),= vallado.lambert(k, r1_earth*u.m, r2_mars*u.m , (tof.sec*u.s),short=False)
 print("Long Orbit Transfer")
-print(f"Departure velocity: {v1_short}")
-print(f"Arrival velocity: {v2_short}\n")
+print(f"Departure velocity: {v1_long}")
+print(f"Arrival velocity: {v2_long}\n")
 
 print("JONS FUNCTION")
 print("Short Orbit Transfer")

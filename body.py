@@ -21,6 +21,8 @@ class Body:
         self.r_ar = []  # position array
         self.v_ar = []  # velocity array
         self.t_ar = []  # time array
+        self.energy_ar = []
+        self.h_ar = []
 
         # Atr mostly for plotting
         self.label = label
@@ -46,7 +48,4 @@ class Spacecraft(Body):
                          celestial_body=False, label=None, color=None)
 
         self.inertia = np.zeros((3, 3))
-        self.energy_ar = []
-        self.h_ar = []
-        self.central_body = None
-        self.model = ''
+        self.model = ""

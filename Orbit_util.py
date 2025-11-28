@@ -276,24 +276,3 @@ def y_dot_n_body(t, y, central_body: Body, n_bodies: int, bodies: list[Body]):
         i += 6
 
     return y_dot
-
-    # def y_dot_n_body_SC(t, y, central_body: Body, central_bodies: list[Body], km=False):
-    #     """
-    #     N Body physics used for propagation for space-craft. Only propgates s/c body with a given list of celestial bodies.
-    #     """
-    #     if km == True:
-    #         G = 6.674 * 10**-9  # km^3 kg^-1 s^-2
-    #     else:
-    #         G = 6.674 * 10**-11  # m^3 kg^-1 s^-2
-
-    #     y_dot = np.zeros(6)
-    #     # ignore git test
-    #     r_sc = y[0:3]
-    #     r_sc_mag = np.linalg.norm(r_sc)
-    #     v_sc = y[3:6]
-
-    #     a_sc = ((-G*central_body.mass)/(r_sc_mag**3))*r_sc
-
-    #     for body in bodies:
-
-    # return y_dot

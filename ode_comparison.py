@@ -118,11 +118,13 @@ h_intial = np.linalg.norm(np.cross(r1_eci, v1_eci))
 h_f_scipy = np.linalg.norm(np.cross(earth_rs[-1], earth_vs[-1]))
 h_f_rk4 = np.linalg.norm(np.cross(earth_rs2[-1], earth_vs2[-1]))
 
+print(f'------------------------------------------------------------------------')
 print(f'Intial h: {h_intial}')
 print(f'Final h of scipy propagation: {h_f_scipy}')
 print(f'Error scipy-intial: {h_f_scipy-h_intial}')
 print(f'Final h of RK4 propagation: {h_f_rk4}')
 print(f'Error RK4-intial: {h_f_rk4-h_intial}')
+print(f'------------------------------------------------------------------------')
 
 # Keeping track of all important elements for scipy
 h1 = np.zeros(np.size(earth_rs[:, 0]))
@@ -222,43 +224,3 @@ ax6.grid(True)
 plt.legend()
 plt.tight_layout()
 plt.show()
-
-
-# r1 = np.zeros(np.size(earth_rs[:, 0]))
-# for i in range(np.size(r1)-1):
-#     r1[i] = np.linalg.norm(earth_rs[i])
-
-# r2 = np.zeros(np.size(earth_rs2[:, 0]))
-# for i in range(np.size(r1)-1):
-#     r2[i] = np.linalg.norm(earth_rs2[i])
-
-# plt.figure()
-# plt.plot(r1[0:-1], color='orange', label='scipy')
-# plt.plot(r2[0:-1], color='blue', linestyle='--', label='rk4')
-# plt.xlabel("Time")
-# plt.ylabel("r_mag")
-# plt.title("Compare Scipy To RK4")
-# plt.legend(loc='right')
-# plt.grid(True)
-# plt.show()
-
-# plt.figure()
-# plt.plot(r1[0:-1]-r2[0:-1], color='orange', label='scipy')
-# plt.xlabel("Time")
-# plt.ylabel("r_mag")
-# plt.title("Compare error scpi-rk4")
-# plt.legend(loc='right')
-# plt.grid(True)
-# plt.show()
-
-
-# ax = plt.figure().add_subplot(projection='3d')
-# ax.plot(earth_rs[:, 0], earth_rs[:, 1], earth_rs[:, 2], color='green')
-# ax.plot(earth_rs2[:, 0], earth_rs2[:, 1], earth_rs2[:, 2], color='purple')
-# plt.show()
-# ax = plt.figure().add_subplot(projection='3d')
-# ax.plot(earth_rs[330:360, 0], earth_rs[330:360, 1],
-#         earth_rs[330:360, 2], color='green')
-# ax.plot(earth_rs2[330:360, 0], earth_rs2[330:360, 1],
-#         earth_rs2[330:360, 2], color='purple', linestyle='--')
-# plt.show()

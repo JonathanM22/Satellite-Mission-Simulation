@@ -144,6 +144,7 @@ Solving for lamberts.
 """
 
 # (v1_short, v2_short),= izzo.lambert(k, r1_earth*u.m, r2_mars*u.m , (tof.sec*u.s))
+
 print("VALLADO FUNCTION")
 (v1_short, v2_short),= vallado.lambert(k, r1_earth*u.m, r2_mars*u.m , (tof.sec*u.s),short=True)
 print("Short Orbit Transfer")
@@ -155,20 +156,20 @@ print(f"Arrival velocity: {v2_short}\n")
 # print(f"Departure velocity: {v1_long}")
 # print(f"Arrival velocity: {v2_long}\n")
 
-print("JONS FUNCTION")
-print("Short Orbit Transfer")
-transfer_short.a, transfer_short.p, transfer_short.e, transfer_short_v1, transfer_short_v2 = lambert_solver(r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='short')
-print(f'Short Transfer semi major axis is {transfer_short.a/1000} km -->  {(transfer_short.a/1000/149597870.7)} AU ')
-print(f'Short Transfer Eccentricity is: {transfer_short.e}')
-print(f'Departure velocity: {transfer_short_v1/1000} km/s')
-print(f'Arrival velocity: {transfer_short_v2/1000} km/s\n')
+# print("JONS FUNCTION")
+# print("Short Orbit Transfer")
+# transfer_short.a, transfer_short.p, transfer_short.e, transfer_short_v1, transfer_short_v2 = lambert_solver(r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='short')
+# print(f'Short Transfer semi major axis is {transfer_short.a/1000} km -->  {(transfer_short.a/1000/149597870.7)} AU ')
+# print(f'Short Transfer Eccentricity is: {transfer_short.e}')
+# print(f'Departure velocity: {transfer_short_v1/1000} km/s')
+# print(f'Arrival velocity: {transfer_short_v2/1000} km/s\n')
 
-print("Long Orbit Transfer")
-transfer_long.a, transfer_long.p, transfer_long.e, transfer_long_v1, transfer_long_v2 = lambert_solver(r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='long')
-print(f'Long Transfer semi major axis is {transfer_long.a/1000} km --> {(transfer_long.a/1000/149597870.7)} AU')
-print(f'Long Transfer Eccentricity is: {transfer_long.e}')
-print(f'Departure velocity: {transfer_long_v1/1000} km/s')
-print(f'Arrival velocity: {transfer_long_v2/1000} km/s\n')
+# print("Long Orbit Transfer")
+# transfer_long.a, transfer_long.p, transfer_long.e, transfer_long_v1, transfer_long_v2 = lambert_solver(r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='long')
+# print(f'Long Transfer semi major axis is {transfer_long.a/1000} km --> {(transfer_long.a/1000/149597870.7)} AU')
+# print(f'Long Transfer Eccentricity is: {transfer_long.e}')
+# print(f'Departure velocity: {transfer_long_v1/1000} km/s')
+# print(f'Arrival velocity: {transfer_long_v2/1000} km/s\n')
 
 print("VRAJ FUNCTION")
 print("Short Orbit Transfer")
@@ -197,7 +198,6 @@ transfer_long_rs, transfer_long_vs = propagate_rk4( transfer_r1, transfer_long_v
 """
 Calcs
 """
-
 dv1_short = transfer_short_v1 - v1_earth
 dv2_short = v2_mars - transfer_short_v2
 dv_short = np.linalg.norm(dv1_short) + np.linalg.norm(dv2_short)
@@ -207,16 +207,16 @@ dv2_long = v2_mars - transfer_long_v2
 dv_long = np.linalg.norm(dv1_long) + np.linalg.norm(dv2_long)
 
  # Full Propogated Orbits: 1 Period
-earth_full, earth_full = propagate_rk4(r1_earth, v1_earth, earth.mu, tspan=(earth.period(earth.a,earth.mu)), dt=dt)
-mars_full, mars_full = propagate_rk4(r1_mars, v1_mars, mars.mu, tspan=(mars.period(mars.a,mars.mu)), dt=dt)
+earth_full_rs, earth_full_vs = propagate_rk4(r1_earth, v1_earth, earth.mu, tspan=(earth.period(earth.a,earth.mu)), dt=dt)
+mars_full_rs, mars_full_vs = propagate_rk4(r1_mars, v1_mars, mars.mu, tspan=(mars.period(mars.a,mars.mu)), dt=dt)
 plot = True
 if plot == True:
     """- - - - - - - - - - - - - - - -PLOTTING- - - - - - - - - - - - - - - -"""
    
     fig = plt.figure()
     ax = plt.figure().add_subplot(projection='3d')
-    ax.plot(earth_full[:, 0], earth_full[:, 1], earth_full[:, 2], color='green', label='earth')
-    ax.plot(mars_full[:, 0], mars_full[:, 1], mars_full[:, 2], color='red', label='mars')
+    ax.plot(earth_full_rs[:, 0], earth_full_rs[:, 1], earth_full_rs[:, 2], color='green', label='earth')
+    ax.plot(mars_full_rs[:, 0], mars_full_rs[:, 1], mars_full_rs[:, 2], color='red', label='mars')
     ax.plot(transfer_short_rs[:, 0], transfer_short_rs[:, 1], transfer_short_rs[:, 2], color='orange', label='short transfer', linestyle='--')
     ax.plot(transfer_long_rs[:, 0], transfer_long_rs[:, 1],transfer_long_rs[:, 2], color='blue', label='long transfer', linestyle='--')
 

@@ -50,7 +50,6 @@ def y_dot_n_ephemeris(t, y, fun_arg: list):
     """
     fun_arg[0] = central_body
     fun_arg[1] = bodies
-    # fun_arg[2] = r_c
 
     r = y[0:3]
     r_mag = np.linalg.norm(r)
@@ -145,16 +144,15 @@ y0 = np.concatenate((sat.r0.value, sat.v0.value))
 # Intiate Solver
 propagation_start_timer = time.perf_counter()
 t0 = epoch
-tf = t0 + sat_orbit.period(sat_orbit.a, sat_orbit.mu)*5
+# tf = t0 + sat_orbit.period(sat_orbit.a, sat_orbit.mu)*3
+tf = t0 + TimeDelta(30, format='jd')
 dt = TimeDelta(60, format='sec')
 ts = np.arange(t0, tf, dt)
 n_steps = len(ts)
 ys = np.zeros((n_steps, 6))
 ys[0] = y0
 ts[0] = t0
-r_c = get_body_barycentric(central_body.label, t0).xyz.to(u.km).value
-fun_arg = [central_body, bodies, r_c]
-
+fun_arg = [central_body, bodies]
 
 step = 1
 for i in range(len(ts) - 1):
@@ -162,6 +160,7 @@ for i in range(len(ts) - 1):
         y_dot_n_ephemeris, dt, ts[step-1], ys[step-1], fun_arg=fun_arg)
     step += 1
 propagation_time = time.perf_counter() - propagation_start_timer
+
 
 # Fill out bodies arrays for plotting
 central_body.t_ar = ts
@@ -228,6 +227,8 @@ if plot:
         ax.set_zlabel("Z [km]")
         ax.legend(loc='center left', bbox_to_anchor=(1.25, 0.5))
         plt.tight_layout()
+        ax.view_init(elev=np.rad2deg(sat_orbit.inc.value),
+                     azim=np.rad2deg(sat_orbit.raan.value), roll=0)
         plt.show()
 
     ax = plt.figure().add_subplot(projection='3d')
@@ -255,18 +256,81 @@ if plot:
     plt.tight_layout()
     plt.show()
 
-    # Add Sun
-    # ax.scatter(0, 0, 0,
-    #            color='yellow', s=15, marker='o', edgecolor='k', label="SUN")
+    """ Plot orbital stats """
 
-    # for body in bodies:
+    # Keeping track of all important elements for RK4
+    h2 = np.zeros(np.size(ys[:, 0]))
+    a2 = np.zeros(np.shape(h2))
+    e2 = np.zeros(np.shape(h2))
+    inc2 = np.zeros(np.shape(h2))
+    raan2 = np.zeros(np.shape(h2))
+    aop2 = np.zeros(np.shape(h2))
 
-    #     """
-    #     # Depature Point
-    #     ax.scatter(body.r_ar[0, 0], body.r_ar[0, 1], body.r_ar[0, 2],  # type:ignore
-    #                color=body.color, s=15, marker='o', edgecolor='k', label=body.label)"""
+    for i in range(np.size(h2)-1):
+        a, e, e_vec, inc, raan, aop, f = rv_2_orb_elm(
+            ys[i, 0:3], ys[i, 0:3], sat_orbit.mu.value)
 
-    #     ax.plot(body.r_ar[:, 0], body.r_ar[:, 1], body.r_ar[:, 2],  # type:ignore
-    #             color=body.color, label=body.label)
+        h2[i] = np.linalg.norm(np.cross(ys[i], ys[i]))
+        a2[i] = a
+        e2[i] = e
+        inc2[i] = inc
+        raan2[i] = raan
+        aop2[i] = aop
 
-    # formatting
+        ax1 = plt.subplot(3, 2, 1)
+        ax1.plot(h1[0:-1], color='orange', label='scipy')
+        ax1.plot(h2[0:-1], color='blue', linestyle='--', label='rk4')
+        ax1.set_xlabel("time (seconds)")
+        ax1.set_ylabel("h")
+        ax1.set_title("Angular Momentum Comparison")
+        ax1.legend(loc='lower left')
+        ax1.grid(True)
+
+        ax2 = plt.subplot(3, 2, 2)
+        ax2.plot(a1[0:-1], color='orange', label='scipy')
+        ax2.plot(a2[0:-1], color='blue', linestyle='--', label='rk4')
+        ax2.set_xlabel("time (seconds)")
+        ax2.set_ylabel("a")
+        ax2.set_title("SMA Comparison")
+        ax2.legend(loc='lower left')
+        ax2.grid(True)
+
+        ax3 = plt.subplot(3, 2, 3)
+        ax3.plot(e1[0:-1], color='orange', label='scipy')
+        ax3.plot(e2[0:-1], color='blue', linestyle='--', label='rk4')
+        ax3.set_xlabel("time (seconds)")
+        ax3.set_ylabel("e")
+        ax3.set_title("ECC Comparison")
+        ax3.legend(loc='lower left')
+        ax3.grid(True)
+
+        ax4 = plt.subplot(3, 2, 4)
+        ax4.plot(inc1[0:-1], color='orange', label='scipy')
+        ax4.plot(inc2[0:-1], color='blue', linestyle='--', label='rk4')
+        ax4.set_xlabel("time (seconds)")
+        ax4.set_ylabel("inc")
+        ax4.set_title("INC Comparison")
+        ax4.legend(loc='lower left')
+        ax4.grid(True)
+
+        ax5 = plt.subplot(3, 2, 5)
+        ax5.plot(raan1[0:-1], color='orange', label='scipy')
+        ax5.plot(raan2[0:-1], color='blue', linestyle='--', label='rk4')
+        ax5.set_xlabel("time (seconds)")
+        ax5.set_ylabel("raan")
+        ax5.set_title("RAAN Comparison")
+        ax5.legend(loc='lower left')
+        ax5.grid(True)
+
+        ax6 = plt.subplot(3, 2, 6)
+        ax6.plot(aop1[0:-1], color='orange', label='scipy')
+        ax6.plot(aop2[0:-1], color='blue', linestyle='--', label='rk4')
+        ax6.set_xlabel("time (seconds)")
+        ax6.set_ylabel("aop")
+        ax6.set_title("AOP Comparison")
+        ax6.legend(loc='lower left')
+        ax6.grid(True)
+
+        plt.legend()
+        plt.tight_layout()
+        plt.show()

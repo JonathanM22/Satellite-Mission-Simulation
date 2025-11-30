@@ -16,7 +16,7 @@ from astropy.coordinates import solar_system_ephemeris
 from astropy.coordinates import get_body_barycentric_posvel
 from Universal_Variable import *
 from poliastro.iod import izzo
-from poliastro.bodies import Sun    
+from poliastro.bodies import Sun
 from poliastro.iod import vallado
 
 # Constants
@@ -44,12 +44,12 @@ mars = Orbit(a=1.52371034*AU,
              mu=SUN_MU)
 
 
-venus = Orbit(a=0.72333566*AU, 
-              e=0.00677672, 
+venus = Orbit(a=0.72333566*AU,
+              e=0.00677672,
               inc=3.39467605,
-              raan= 76.67984255,
+              raan=76.67984255,
               aop=131.60246718,
-              mu = SUN_MU)
+              mu=SUN_MU)
 
 
 transfer_short = Orbit(mu=SUN_MU)
@@ -66,9 +66,11 @@ arrival_date = depature_date + tof
 print(f'{arrival_date}\n')
 
 # ECI since all motion are heliocentric and the barycentric frame is centered at the sun - moves at constant velocity
-r1_earth_eci, v1_earth_eci = get_body_barycentric_posvel('earth', depature_date)
+r1_earth_eci, v1_earth_eci = get_body_barycentric_posvel(
+    'earth', depature_date)
 r1_mars_eci, v1_mars_eci = get_body_barycentric_posvel('mars', depature_date)
-r1_venus_eci,v1_venus_eci = get_body_barycentric_posvel('venus',depature_date)
+r1_venus_eci, v1_venus_eci = get_body_barycentric_posvel(
+    'venus', depature_date)
 
 
 """
@@ -92,6 +94,7 @@ v1_venus = (v1_venus_eci.xyz - v_sun1.xyz).to(u.m/u.s).value  # type:ignore
 
 # Propogate using RK4
 
+
 def RK4_single_step(fun, dt, t0, y0, fun_arg: list):
     k1 = fun(t0, y0, fun_arg)
     k2 = fun((t0 + (dt/2)), (y0 + ((dt/2)*k1)), fun_arg)
@@ -99,6 +102,7 @@ def RK4_single_step(fun, dt, t0, y0, fun_arg: list):
     k4 = fun((t0 + dt), (y0 + (dt*k3)), fun_arg)
     y1 = y0 + (dt/6)*(k1 + 2*k2 + 2*k3 + k4)
     return y1
+
 
 def y_dot(t, y, fun_arg):
     mu = fun_arg[0]
@@ -109,9 +113,12 @@ def y_dot(t, y, fun_arg):
     ax, ay, az = -r*mu/r_norm**3  # Two body Problem ODE
     return np.array([vx, vy, vz, ax, ay, az])
 
+
 dt = 86400
 
 # made this function to make it easier to propogate several orbits
+
+
 def propagate_rk4(r0, v0, mu, tspan, dt):
     n_steps = int((tspan)/dt)
     ys = np.zeros((n_steps, 6))
@@ -124,16 +131,18 @@ def propagate_rk4(r0, v0, mu, tspan, dt):
     for i in range(n_steps - 1):
         ts[i+1] = ts[i] + dt
         ys[i+1] = RK4_single_step(y_dot, dt, ts[i], ys[i], fun_arg=fun_arg)
-        
+
     rs = ys[:, :3]
     vs = ys[:, 3:6]
 
     return (rs, vs)
 
 
-# Propogate orbits of Earth and Mars during TOF 
-earth_rs, earth_vs = propagate_rk4(r1_earth, v1_earth, earth.mu, tspan=(tof.sec), dt=dt)
-mars_rs, mars_vs = propagate_rk4(r1_mars, v1_mars, mars.mu, tspan=(tof.sec), dt=dt)
+# Propogate orbits of Earth and Mars during TOF
+earth_rs, earth_vs = propagate_rk4(
+    r1_earth, v1_earth, earth.mu, tspan=(tof.sec), dt=dt)
+mars_rs, mars_vs = propagate_rk4(
+    r1_mars, v1_mars, mars.mu, tspan=(tof.sec), dt=dt)
 
 # Final Position and velocity of Mars
 r2_mars = mars_rs[-1]
@@ -146,7 +155,8 @@ Solving for lamberts.
 # (v1_short, v2_short),= izzo.lambert(k, r1_earth*u.m, r2_mars*u.m , (tof.sec*u.s))
 
 print("VALLADO FUNCTION")
-(v1_short, v2_short),= vallado.lambert(k, r1_earth*u.m, r2_mars*u.m , (tof.sec*u.s),short=True)
+(v1_short, v2_short), = vallado.lambert(
+    k, r1_earth*u.m, r2_mars*u.m, (tof.sec*u.s), short=True)
 print("Short Orbit Transfer")
 print(f"Departure velocity: {v1_short}")
 print(f"Arrival velocity: {v2_short}\n")
@@ -173,16 +183,20 @@ print(f"Arrival velocity: {v2_short}\n")
 
 print("VRAJ FUNCTION")
 print("Short Orbit Transfer")
-transfer_short.a, transfer_short.p, transfer_short.e, transfer_short_v1, transfer_short_v2 = universal_lambert( r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='short')
-print(f'Short Transfer semi major axis is {transfer_short.a/1000} km -->  {(transfer_short.a/1000/149597870.7)} AU ')
+transfer_short.a, transfer_short.p, transfer_short.e, transfer_short_v1, transfer_short_v2 = universal_lambert(
+    r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='short')
+print(
+    f'Short Transfer semi major axis is {transfer_short.a/1000} km -->  {(transfer_short.a/1000/149597870.7)} AU ')
 print(f'Short Transfer Eccentricity is: {transfer_short.e}')
 print(f'Departure velocity: {transfer_short_v1/1000} km/s')
 print(f'Arrival velocity: {transfer_short_v2/1000} km/s\n')
 
 
 print("Long Orbit Transfer")
-transfer_long.a, transfer_long.p, transfer_long.e, transfer_long_v1, transfer_long_v2 = universal_lambert(r1_earth, r2_mars, (tof.sec), transfer_long.mu, desired_path='long')
-print(f'Long Transfer semi major axis is {transfer_long.a/1000} km --> {(transfer_long.a/1000/149597870.7)} AU')
+transfer_long.a, transfer_long.p, transfer_long.e, transfer_long_v1, transfer_long_v2 = universal_lambert(
+    r1_earth, r2_mars, (tof.sec), transfer_long.mu, desired_path='long')
+print(
+    f'Long Transfer semi major axis is {transfer_long.a/1000} km --> {(transfer_long.a/1000/149597870.7)} AU')
 print(f'Long Transfer Eccentricity is: {transfer_long.e}')
 print(f'Departure velocity: {transfer_long_v1/1000} km/s')
 print(f'Arrival velocity: {transfer_long_v2/1000} km/s')
@@ -192,8 +206,10 @@ print(f'Arrival velocity: {transfer_long_v2/1000} km/s')
 Propogate transfer orbits
 """
 transfer_r1 = r1_earth
-transfer_short_rs, transfer_short_vs = propagate_rk4( transfer_r1, transfer_short_v1, transfer_short.mu, tspan=tof.sec, dt=dt)
-transfer_long_rs, transfer_long_vs = propagate_rk4( transfer_r1, transfer_long_v1, transfer_long.mu, tspan=tof.sec, dt=dt)
+transfer_short_rs, transfer_short_vs = propagate_rk4(
+    transfer_r1, transfer_short_v1, transfer_short.mu, tspan=tof.sec, dt=dt)
+transfer_long_rs, transfer_long_vs = propagate_rk4(
+    transfer_r1, transfer_long_v1, transfer_long.mu, tspan=tof.sec, dt=dt)
 
 """
 Calcs
@@ -206,34 +222,45 @@ dv1_long = transfer_long_v1 - v1_earth
 dv2_long = v2_mars - transfer_long_v2
 dv_long = np.linalg.norm(dv1_long) + np.linalg.norm(dv2_long)
 
- # Full Propogated Orbits: 1 Period
-earth_full_rs, earth_full_vs = propagate_rk4(r1_earth, v1_earth, earth.mu, tspan=(earth.period(earth.a,earth.mu)), dt=dt)
-mars_full_rs, mars_full_vs = propagate_rk4(r1_mars, v1_mars, mars.mu, tspan=(mars.period(mars.a,mars.mu)), dt=dt)
+# Full Propogated Orbits: 1 Period
+earth_full_rs, earth_full_vs = propagate_rk4(
+    r1_earth, v1_earth, earth.mu, tspan=(earth.period(earth.a, earth.mu)), dt=dt)
+mars_full_rs, mars_full_vs = propagate_rk4(
+    r1_mars, v1_mars, mars.mu, tspan=(mars.period(mars.a, mars.mu)), dt=dt)
 plot = True
 if plot == True:
     """- - - - - - - - - - - - - - - -PLOTTING- - - - - - - - - - - - - - - -"""
-   
+
     fig = plt.figure()
     ax = plt.figure().add_subplot(projection='3d')
-    ax.plot(earth_full_rs[:, 0], earth_full_rs[:, 1], earth_full_rs[:, 2], color='green', label='earth')
-    ax.plot(mars_full_rs[:, 0], mars_full_rs[:, 1], mars_full_rs[:, 2], color='red', label='mars')
-    ax.plot(transfer_short_rs[:, 0], transfer_short_rs[:, 1], transfer_short_rs[:, 2], color='orange', label='short transfer', linestyle='--')
-    ax.plot(transfer_long_rs[:, 0], transfer_long_rs[:, 1],transfer_long_rs[:, 2], color='blue', label='long transfer', linestyle='--')
+    ax.plot(earth_full_rs[:, 0], earth_full_rs[:, 1],
+            earth_full_rs[:, 2], color='green', label='earth')
+    ax.plot(mars_full_rs[:, 0], mars_full_rs[:, 1],
+            mars_full_rs[:, 2], color='red', label='mars')
+    ax.plot(transfer_short_rs[:, 0], transfer_short_rs[:, 1], transfer_short_rs[:,
+            2], color='orange', label='short transfer', linestyle='--')
+    ax.plot(transfer_long_rs[:, 0], transfer_long_rs[:, 1], transfer_long_rs[:,
+            2], color='blue', label='long transfer', linestyle='--')
 
     # Add Sun
-    ax.scatter(0, 0, 0, color='yellow', s=15, marker='o', edgecolor='k', label="SUN")
+    ax.scatter(0, 0, 0, color='yellow', s=15,
+               marker='o', edgecolor='k', label="SUN")
 
     # Add Earth Departure Point
-    ax.scatter(earth_rs[0, 0], earth_rs[0, 1], earth_rs[0, 2],color='green', s=15, marker='o', edgecolor='k', label="Earth Depature")
+    ax.scatter(earth_rs[0, 0], earth_rs[0, 1], earth_rs[0, 2], color='green',
+               s=15, marker='o', edgecolor='k', label="Earth Depature")
 
     # Add Earth Arrival Point
-    ax.scatter(earth_rs[-1, 0], earth_rs[-1, 1], earth_rs[-1, 2],color='green', s=15, marker='o', edgecolor='k', label="Earth Arrival")
+    ax.scatter(earth_rs[-1, 0], earth_rs[-1, 1], earth_rs[-1, 2],
+               color='green', s=15, marker='o', edgecolor='k', label="Earth Arrival")
 
     # Add Mars Departure Point
-    ax.scatter(mars_rs[0, 0], mars_rs[0, 1], mars_rs[0, 2],color='red', s=15, marker='o', edgecolor='k', label="Mars Depature")
+    ax.scatter(mars_rs[0, 0], mars_rs[0, 1], mars_rs[0, 2], color='red',
+               s=15, marker='o', edgecolor='k', label="Mars Depature")
 
     # Add Mars Arrival Point
-    ax.scatter(mars_rs[-1, 0], mars_rs[-1, 1], mars_rs[-1, 2],color='red', s=15, marker='o', edgecolor='k', label="Mars Arrival")
+    ax.scatter(mars_rs[-1, 0], mars_rs[-1, 1], mars_rs[-1, 2],
+               color='red', s=15, marker='o', edgecolor='k', label="Mars Arrival")
 
     # formatting
     ax.set_title(

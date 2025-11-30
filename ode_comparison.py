@@ -136,7 +136,7 @@ aop1 = np.zeros(np.shape(h1))
 
 for i in range(np.size(h1)-1):
 
-    a, e, e_vec, inc, raan, aop, f = rv_2_orb_elm(
+    a, e, e_vec, inc, raan, aop = rv_2_orb_elm(
         earth_rs[i], earth_vs[i], earth.mu)
 
     h1[i] = np.linalg.norm(np.cross(earth_rs[i], earth_vs[i]))

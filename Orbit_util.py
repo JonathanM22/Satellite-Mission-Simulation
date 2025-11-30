@@ -255,29 +255,28 @@ def rv_2_orb_elm(r, v, mu):
     Based on 458 notes 2/10
     """
 
-    r_mag = np.linalg.norm(r)
-    v_mag = np.linald.norm(v)
-
-    energy = ((v**2) / 2) - (mu/r_mag)
-    a = -mu/(2*energy)
-
-    h = np.cross(r, v)
-    h_mag = np.linalg.norm(h)
-
-    e = (np.cross(v, h)/mu) - (r/r_mag)
-    e_mag = np.linalg.norm(e)
-    k = [0, 0, 1]
-
-    # No quad check for i
-    cos_i = np.dot(k, h) / h_mag
-    i = np.arccos(cos_i)
-
-    # No quad check for RAAN
     I = [1, 0, 0]
     J = [0, 1, 0]
+    K = [0, 0, 1]
+
+    r_mag = np.linalg.norm(r)
+    v_mag = np.linalg.norm(v)
+
+    energy = ((v_mag**2) / 2) - (mu/r_mag)
+    a = -mu/(2*energy)
+
+    h_vec = np.cross(r, v)
+    h = np.linalg.norm(h_vec)
+
+    e_vec = (np.cross(v, h_vec)/mu) - (r/r_mag)
+    e = np.linalg.norm(e_vec)
+
+    cos_i = np.dot(K, h_vec) / h
+    i = np.arccos(cos_i)
 
     # Numpy has a special atan2, not using because we do a quad check?
-    n = (np.cross(k, h))/(np.linalg.norm(np.cross(k, h)))
+    Kxh = np.cross(K, h_vec)
+    n = (Kxh)/(np.linalg.norm(Kxh))
 
     raan = np.arctan((np.dot(J, n) / np.dot(I, n)))
 
@@ -286,13 +285,16 @@ def rv_2_orb_elm(r, v, mu):
         raan += np.pi
 
     # aop quad check
-    aop = np.arccos((np.dot(e, n))/e_mag)
+    aop = np.arccos((np.dot(e_vec, n))/e)
 
-    aop_quad_check = np.dot(e, k)
+    aop_quad_check = np.dot(e_vec, K)
     if aop_quad_check < 0:
-        aop *= -1
+        aop = (2*np.pi) - aop
 
-    if aop < 0:
-        aop += (2*np.pi)
+    f = np.arccos(np.dot(e_vec, r)/(e*r_mag))
 
-    return a, e, e_mag, i, raan, aop
+    radial_v = np.dot(r, (v/r_mag))
+    if radial_v < 0:
+        f = (2*np.pi) - f
+
+    return a, e, e_vec, i, raan, aop, f

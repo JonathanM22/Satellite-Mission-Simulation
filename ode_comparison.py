@@ -1,5 +1,5 @@
 from orbit import *
-from Orbit_util import *
+from orbit_util import *
 import numpy as np
 from scipy.integrate import ode
 from scipy import optimize
@@ -136,7 +136,7 @@ aop1 = np.zeros(np.shape(h1))
 
 for i in range(np.size(h1)-1):
 
-    a, e, e_vec, inc, raan, aop = rv_2_orb_elm(
+    a, e, e_vec, inc, raan, aop, f = rv_2_orb_elm(
         earth_rs[i], earth_vs[i], earth.mu)
 
     h1[i] = np.linalg.norm(np.cross(earth_rs[i], earth_vs[i]))
@@ -224,3 +224,5 @@ ax6.grid(True)
 plt.legend()
 plt.tight_layout()
 plt.show()
+
+print('break')

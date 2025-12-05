@@ -1,13 +1,17 @@
 """
 n-body. Trying to do n-body propagation
 """
+
+# Custom libs
 from orbit import *
-from Orbit_util import *
+from orbit_util import *
 from body import *
+from Universal_Variable import *
+
+# Standard libs
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-
 from astropy.time import Time
 from astropy.time import TimeDelta
 from astropy import units as u
@@ -15,6 +19,10 @@ from astropy import constants as const
 from astropy.coordinates import solar_system_ephemeris
 from astropy.coordinates import get_body_barycentric_posvel
 from astropy.coordinates import get_body_barycentric
+
+# #solar_system_ephemeris.bodies
+# ('earth', 'sun', 'moon', 'mercury', 'venus', 'earth-moon-barycenter', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune')
+
 
 """
 Functions
@@ -116,8 +124,6 @@ earth_parking.p = earth_parking.calc_p(earth_parking.a, earth_parking.e)
 earth_parking.energy = earth_parking.calc_energy(
     earth_parking.a, earth_parking.mu)
 
-transfer_short = Orbit(mu=const.GM_sun)
-
 """
 Propagating the earth parking orbit
 """
@@ -142,14 +148,16 @@ sat.v0 = v_eci * (u.km/u.s)
 y0 = np.concatenate((sat.r0.value, sat.v0.value))
 
 # Intiate Solver
-propagation_start_timer = time.perf_counter()
-t0 = epoch
-# tf = t0 + sat_orbit.period(sat_orbit.a, sat_orbit.mu)*3
-tf = t0 + TimeDelta(30, format='jd')
+propagation_start_timer_1 = time.perf_counter()
 dt = TimeDelta(60, format='sec')
+# t0 = epoch - sat_orbit.period(sat_orbit.a, sat_orbit.mu)*2
+dt_steps = np.round(
+    (sat_orbit.period(sat_orbit.a, sat_orbit.mu).value*2)/dt.value)
+t0 = epoch - dt*dt_steps + dt
+tf = epoch
 ts = np.arange(t0, tf, dt)
-n_steps = len(ts)
-ys = np.zeros((n_steps, 6))
+n_steps_1 = len(ts)
+ys = np.zeros((n_steps_1, 6))
 ys[0] = y0
 ts[0] = t0
 fun_arg = [central_body, bodies]
@@ -159,178 +167,207 @@ for i in range(len(ts) - 1):
     ys[step] = RK4_single_step(
         y_dot_n_ephemeris, dt, ts[step-1], ys[step-1], fun_arg=fun_arg)
     step += 1
-propagation_time = time.perf_counter() - propagation_start_timer
+propagation_time_1 = time.perf_counter() - propagation_start_timer_1
 
-
-# Fill out bodies arrays for plotting
-central_body.t_ar = ts
-for body in bodies:
-    body.t_ar = ts
-
-central_body.r_ar = np.zeros((n_steps, 3))
-sat.r_ar = np.zeros((n_steps, 3))
-for body in bodies:
-    body.r_ar = np.zeros((n_steps, 3))
-
+# Generating position of SAT in terms of barycenter
+central_body.r_ar = np.zeros((n_steps_1, 3))
+central_body.v_ar = np.zeros((n_steps_1, 3))
+sat_pos_bary = np.zeros((n_steps_1, 3))
+sat_vel_bary = np.zeros((n_steps_1, 3))
 for i, t in enumerate(ts):
-    central_body.r_ar[i] = get_body_barycentric(
-        central_body.label, t).xyz.to(u.km).value
-    for body in bodies:
-        body.r_ar[i] = get_body_barycentric(body.label, t).xyz.to(u.km).value
+    r, v = get_body_barycentric_posvel(
+        central_body.label, t)
+
+    central_body.r_ar[i] = r.xyz.to(u.km)
+    central_body.v_ar[i] = v.xyz.to(u.km/u.s)
+
+for i in range(len(ts)):
+    sat_pos_bary[i] = central_body.r_ar[i] + ys[i, 0:3]   # r_s = r_c + r
+    sat_vel_bary[i] = central_body.v_ar[i] + ys[i, 3:6]
+
+sat.r_ar = sat_pos_bary
+sat.v_ar = sat_vel_bary
+sat.t_ar = ts
+
+"""
+Propagating the earth mars Transfer
+"""
+# Defining Transfer Orbit
+tof = TimeDelta(180, format='jd')
+arrival_date = epoch + tof
+tranfer_orbit = Orbit(mu=SUN_MU)
+
+central_body = sun
+sat_orbit = tranfer_orbit
+bodies = [earth, mars]
+
+# Earth @ depature and Mars @ arrival helio centric
+# Helito centric cords is ONLY FOR THE LAMBERT PROBLEM!!
+r1_sun_lambert = get_body_barycentric(sun.label, epoch).xyz.to(u.km).value
+r2_sun_lambert = get_body_barycentric(
+    sun.label, arrival_date).xyz.to(u.km).value
+r1_lambert = get_body_barycentric(
+    earth.label, epoch).xyz.to(u.km).value - r1_sun_lambert
+r2_lambert = get_body_barycentric(
+    mars.label, arrival_date).xyz.to(u.km).value - r2_sun_lambert
+
+a, p, e, tranfer_v1, tranfer_v2 = universal_lambert(
+    r1_lambert, r2_lambert, tof.sec, tranfer_orbit.mu.value, desired_path='long')
+
+tranfer_orbit.a = a * u.km
+tranfer_orbit.e = e * u.km/u.km
+tranfer_orbit.p = p * u.km
+
+# Intiate Solver
+propagation_start_timer_2 = time.perf_counter()
+dt = TimeDelta(86400, format='sec')
+dt_steps = np.round(tof.sec/dt.value)
+t0 = sat.t_ar[-1]
+tf = t0 + tof
+ts = np.arange(t0, tf, dt)
+n_steps_2 = len(ts)
+
+# Bary centric frame math
+r_s = sat.r_ar[-1]
+r_c = get_body_barycentric(central_body.label, t0).xyz.to(u.km).value
+r0 = r_s - r_c
+v0 = tranfer_v1
+
+y0 = np.concatenate((r0, v0))
+
+ys = np.zeros((n_steps_2, 6))
+ys[0] = y0
+ts[0] = t0
+fun_arg = [central_body, bodies]
+
+step = 1
+for i in range(len(ts) - 1):
+    ys[step] = RK4_single_step(
+        y_dot_n_ephemeris, dt, ts[step-1], ys[step-1], fun_arg=fun_arg)
+    step += 1
+propagation_time_2 = time.perf_counter() - propagation_start_timer_2
 
 # Generating position of sat in terms of barycenter
+central_body.r_ar = np.zeros((n_steps_2, 3))
+central_body.v_ar = np.zeros((n_steps_2, 3))
+sat_pos_bary = np.zeros((n_steps_2, 3))
+sat_vel_bary = np.zeros((n_steps_2, 3))
+for i, t in enumerate(ts):
+    r, v = get_body_barycentric_posvel(
+        central_body.label, t)
+
+    central_body.r_ar[i] = r.xyz.to(u.km)
+    central_body.v_ar[i] = v.xyz.to(u.km/u.s)
+
 for i in range(len(ts)):
-    # r_s = r_c + r
-    sat.r_ar[i] = central_body.r_ar[i] + ys[i, 0:3]
+    sat_pos_bary[i] = central_body.r_ar[i] + ys[i, 0:3]   # r_s = r_c + r
+    sat_vel_bary[i] = central_body.v_ar[i] + ys[i, 3:6]
 
-program_time = time.perf_counter() - program_start_timer
+sat.r_ar = np.concatenate((sat.r_ar, sat_pos_bary))
+sat.v_ar = np.concatenate((sat.v_ar, sat_vel_bary))
+sat.t_ar = np.concatenate((sat.t_ar, ts))
+
 print(f'------------------------------------------------------------------------')
-print(f'Propagation took {propagation_time} seconds')
-print(f'Python Script took {program_time} seconds')
+print(f'Leg 1 Propagation took {propagation_time_1} seconds')
+print(f'Leg 2 Propagation took {propagation_time_2} seconds')
+print(
+    f'Python Script took {time.perf_counter() - program_start_timer} seconds')
 print(f'------------------------------------------------------------------------')
 
+print("BREAL")
 
-"""
-Plotting
-"""
-plot = True
 
-if plot:
-    """
-    Plot trajectory 
-    """
+ax = plt.figure().add_subplot(projection='3d')
+ax.plot(sat.r_ar[:, 0], sat.r_ar[:, 1], sat.r_ar[:, 2],
+        color=sat.color, label=sat.label)
 
-    earth_frame = True
-    if earth_frame:
-        ax = plt.figure().add_subplot(projection='3d')
+ax.set_title(f"Barycenter Frame", fontsize=14, pad=10)
+ax.set_aspect('equal')
+ax.set_xlabel("X [km]")
+ax.set_ylabel("Y [km]")
+ax.set_zlabel("Z [km]")
+ax.legend(loc='center left', bbox_to_anchor=(1.25, 0.5))
+plt.tight_layout()
+plt.show()
 
-        # Add Earth
-        ax.scatter(0, 0, 0, color=central_body.color, s=5,
-                   marker='o', edgecolor='k', label=central_body.label)
+# for body in bodies:
+#     body.t_ar = ts
 
-        moon_wrt_earth = moon.r_ar - earth.r_ar
+# central_body.r_ar = np.zeros((n_steps, 3))
+# sat.r_ar = np.zeros((n_steps, 3))
+# for body in bodies:
+#     body.r_ar = np.zeros((n_steps, 3))
 
-        ax.plot(moon_wrt_earth[:, 0],
-                moon_wrt_earth[:, 1],
-                moon_wrt_earth[:, 2],
-                color=moon.color,
-                label=moon.label)
+# for i, t in enumerate(ts):
+#     central_body.r_ar[i] = get_body_barycentric(
+#         central_body.label, t).xyz.to(u.km).value
+#     for body in bodies:
+#         body.r_ar[i] = get_body_barycentric(body.label, t).xyz.to(u.km).value
 
-        ax.plot(ys[:, 0], ys[:, 1], ys[:, 2],
-                color=sat.color,
-                label=sat.label)
+# """
+# Plotting
+# """
+# plot = True
 
-        ax.set_title(f"Earth Frame", fontsize=14, pad=10)
-        ax.set_aspect('equal')
-        ax.set_xlabel("X [km]")
-        ax.set_ylabel("Y [km]")
-        ax.set_zlabel("Z [km]")
-        ax.legend(loc='center left', bbox_to_anchor=(1.25, 0.5))
-        plt.tight_layout()
-        ax.view_init(elev=np.rad2deg(sat_orbit.inc.value),
-                     azim=np.rad2deg(sat_orbit.raan.value), roll=0)
-        plt.show()
+# if plot:
 
-    ax = plt.figure().add_subplot(projection='3d')
-    ax.plot(central_body.r_ar[:, 0],
-            central_body.r_ar[:, 1],
-            central_body.r_ar[:, 2],
-            color=central_body.color,
-            label=central_body.label)
+#     """Earth Frame"""
+#     earth_frame = True
+#     if earth_frame:
+#         ax = plt.figure().add_subplot(projection='3d')
 
-    ax.plot(moon.r_ar[:, 0],
-            moon.r_ar[:, 1],
-            moon.r_ar[:, 2],
-            color=moon.color,
-            label=moon.label)
+#         # Add Earth
+#         ax.scatter(0, 0, 0, color=central_body.color, s=5,
+#                    marker='o', edgecolor='k', label=central_body.label)
 
-    ax.plot(sat.r_ar[:, 0], sat.r_ar[:, 1], sat.r_ar[:, 2],
-            color=sat.color, label=sat.label)
+#         moon_wrt_earth = moon.r_ar - earth.r_ar
 
-    ax.set_title(f"Barycenter Frame", fontsize=14, pad=10)
-    ax.set_aspect('equal')
-    ax.set_xlabel("X [km]")
-    ax.set_ylabel("Y [km]")
-    ax.set_zlabel("Z [km]")
-    ax.legend(loc='center left', bbox_to_anchor=(1.25, 0.5))
-    plt.tight_layout()
-    plt.show()
+#         ax.plot(moon_wrt_earth[:, 0],
+#                 moon_wrt_earth[:, 1],
+#                 moon_wrt_earth[:, 2],
+#                 color=moon.color,
+#                 label=moon.label)
 
-    """ Plot orbital stats """
+#         ax.plot(ys[:, 0], ys[:, 1], ys[:, 2],
+#                 color=sat.color,
+#                 label=sat.label)
 
-    # Keeping track of all important elements for RK4
-    h2 = np.zeros(np.size(ys[:, 0]))
-    a2 = np.zeros(np.shape(h2))
-    e2 = np.zeros(np.shape(h2))
-    inc2 = np.zeros(np.shape(h2))
-    raan2 = np.zeros(np.shape(h2))
-    aop2 = np.zeros(np.shape(h2))
+#         ax.set_title(f"Earth Frame", fontsize=14, pad=10)
+#         ax.set_aspect('equal')
+#         ax.set_xlabel("X [km]")
+#         ax.set_ylabel("Y [km]")
+#         ax.set_zlabel("Z [km]")
+#         ax.legend(loc='center left', bbox_to_anchor=(1.25, 0.5))
+#         plt.tight_layout()
+#         ax.set_xlim([-50000, 50000])
+#         ax.set_ylim([-50000, 50000])
+#         ax.set_zlim([-50000, 50000])
+#         ax.view_init(elev=np.rad2deg(sat_orbit.inc.value),
+#                      azim=90, roll=0)
+#         plt.show()
 
-    for i in range(np.size(h2)-1):
-        a, e, e_vec, inc, raan, aop, f = rv_2_orb_elm(
-            ys[i, 0:3], ys[i, 0:3], sat_orbit.mu.value)
+#     """ Bary Centric Frame """
+#     ax = plt.figure().add_subplot(projection='3d')
+#     ax.plot(central_body.r_ar[:, 0],
+#             central_body.r_ar[:, 1],
+#             central_body.r_ar[:, 2],
+#             color=central_body.color,
+#             label=central_body.label)
 
-        h2[i] = np.linalg.norm(np.cross(ys[i], ys[i]))
-        a2[i] = a
-        e2[i] = e
-        inc2[i] = inc
-        raan2[i] = raan
-        aop2[i] = aop
+#     ax.plot(moon.r_ar[:, 0],
+#             moon.r_ar[:, 1],
+#             moon.r_ar[:, 2],
+#             color=moon.color,
+#             label=moon.label)
 
-        ax1 = plt.subplot(3, 2, 1)
-        ax1.plot(h1[0:-1], color='orange', label='scipy')
-        ax1.plot(h2[0:-1], color='blue', linestyle='--', label='rk4')
-        ax1.set_xlabel("time (seconds)")
-        ax1.set_ylabel("h")
-        ax1.set_title("Angular Momentum Comparison")
-        ax1.legend(loc='lower left')
-        ax1.grid(True)
+#     ax.plot(sat.r_ar[:, 0], sat.r_ar[:, 1], sat.r_ar[:, 2],
+#             color=sat.color, label=sat.label)
 
-        ax2 = plt.subplot(3, 2, 2)
-        ax2.plot(a1[0:-1], color='orange', label='scipy')
-        ax2.plot(a2[0:-1], color='blue', linestyle='--', label='rk4')
-        ax2.set_xlabel("time (seconds)")
-        ax2.set_ylabel("a")
-        ax2.set_title("SMA Comparison")
-        ax2.legend(loc='lower left')
-        ax2.grid(True)
-
-        ax3 = plt.subplot(3, 2, 3)
-        ax3.plot(e1[0:-1], color='orange', label='scipy')
-        ax3.plot(e2[0:-1], color='blue', linestyle='--', label='rk4')
-        ax3.set_xlabel("time (seconds)")
-        ax3.set_ylabel("e")
-        ax3.set_title("ECC Comparison")
-        ax3.legend(loc='lower left')
-        ax3.grid(True)
-
-        ax4 = plt.subplot(3, 2, 4)
-        ax4.plot(inc1[0:-1], color='orange', label='scipy')
-        ax4.plot(inc2[0:-1], color='blue', linestyle='--', label='rk4')
-        ax4.set_xlabel("time (seconds)")
-        ax4.set_ylabel("inc")
-        ax4.set_title("INC Comparison")
-        ax4.legend(loc='lower left')
-        ax4.grid(True)
-
-        ax5 = plt.subplot(3, 2, 5)
-        ax5.plot(raan1[0:-1], color='orange', label='scipy')
-        ax5.plot(raan2[0:-1], color='blue', linestyle='--', label='rk4')
-        ax5.set_xlabel("time (seconds)")
-        ax5.set_ylabel("raan")
-        ax5.set_title("RAAN Comparison")
-        ax5.legend(loc='lower left')
-        ax5.grid(True)
-
-        ax6 = plt.subplot(3, 2, 6)
-        ax6.plot(aop1[0:-1], color='orange', label='scipy')
-        ax6.plot(aop2[0:-1], color='blue', linestyle='--', label='rk4')
-        ax6.set_xlabel("time (seconds)")
-        ax6.set_ylabel("aop")
-        ax6.set_title("AOP Comparison")
-        ax6.legend(loc='lower left')
-        ax6.grid(True)
-
-        plt.legend()
-        plt.tight_layout()
-        plt.show()
+#     ax.set_title(f"Barycenter Frame", fontsize=14, pad=10)
+#     ax.set_aspect('equal')
+#     ax.set_xlabel("X [km]")
+#     ax.set_ylabel("Y [km]")
+#     ax.set_zlabel("Z [km]")
+#     ax.legend(loc='center left', bbox_to_anchor=(1.25, 0.5))
+#     plt.tight_layout()
+#     plt.show()

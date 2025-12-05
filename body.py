@@ -18,11 +18,11 @@ class Body:
     def __init__(self, mass, epoch, r0=0, v0=0, celestial_body=False, label='unlabeled', color='black'):
         self.mass = mass
         self.epoch = epoch
-        self.r_ar = []  # position array
-        self.v_ar = []  # velocity array
-        self.t_ar = []  # time array
-        self.energy_ar = []
-        self.h_ar = []
+        self.r_ar = np.zeros(3)  # position array
+        self.v_ar = np.zeros(3)  # velocity array
+        self.t_ar = np.zeros(3)  # time array
+        self.energy_ar = np.zeros(1)
+        self.h_ar = np.zeros(1)
 
         # Atr mostly for plotting
         self.label = label

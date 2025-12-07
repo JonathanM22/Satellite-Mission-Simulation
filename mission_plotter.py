@@ -165,7 +165,7 @@ if plot_leg_2:
     plt.show()
 
 """
-Plot LEG-2
+Plot LEG-3
 """
 leg_3_data = np.load("leg_3_data.npy", allow_pickle=True)[()]
 

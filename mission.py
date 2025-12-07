@@ -68,6 +68,8 @@ def y_dot_n_ephemeris(t, y, fun_arg: list):
 
     a = ((G.value*m_c)/(r_mag**3)) * -r
 
+    # print(f'Accel from CB: {a}')
+
     for body in bodies:
         r_k = get_body_barycentric(body.label, t).xyz.to(u.km).value
         m_k = body.mass.value
@@ -79,7 +81,11 @@ def y_dot_n_ephemeris(t, y, fun_arg: list):
         r_sk = r_ck - r
 
         r_sk_mag = np.linalg.norm(r_sk)
-        a = a + (((G.value*m_k)/(r_sk_mag**3)) * r_sk)
+
+        a_k = (((G.value*m_k)/(r_sk_mag**3)) * r_sk)
+        # print(f'Accel from {body.label}: {a_k}')
+
+        a = a + a_k
 
     y_dot = np.concatenate((v, a))
 
@@ -94,19 +100,35 @@ program_start_timer = time.perf_counter()
 MOON_MASS = (7.34 * 10**22) * u.kg
 SAT_MASS = 100 * u.kg
 G = const.G.to(u.km**3 / (u.kg * u.s**2))  # convert to km
+SUN_MASS = const.M_sun
 SUN_MU = const.GM_sun.to(u.km**3 / u.s**2)
+EARTH_MASS = const.M_earth
 EARTH_MU = const.GM_earth.to(u.km**3 / u.s**2)
 MARS_MASS = (6.39 * 10**23) * u.kg
 MARS_RAD = 3390 * u.km
 MARS_MU = MARS_MASS * G
+JUPITER_MASS = const.M_jup
+JUPITER_MU = const.GM_jup.to(u.km**3 / u.s**2)
+SATURN_MASS = (5.638 * 10**26) * u.kg
+URANAS_MASS = (8.681 * 10**25) * u.kg
+NEPTUNE_MASS = (1.024 * 10**26) * u.kg
+MERCURY_MASS = (3.285 * 10**23) * u.kg
+VENUS_MASS = (4.867 * 10**24) * u.kg
 
 # Intialize bodies
 epoch = Time("2026-11-08")
 solar_system_ephemeris.set('de432s')
-sun = Body(const.M_sun, epoch, celestial_body='sun', color="yellow")
-earth = Body(const.M_earth, epoch, celestial_body="earth", color="green")
+sun = Body(SUN_MASS, epoch, celestial_body='sun', color="yellow")
+earth = Body(EARTH_MASS, epoch, celestial_body="earth", color="green")
 moon = Body(MOON_MASS, epoch, celestial_body="moon", color='grey')
 mars = Body(MARS_MASS, epoch, celestial_body="mars", color="red")
+jupiter = Body(JUPITER_MASS, epoch, celestial_body="jupiter", color="orange")
+saturn = Body(SATURN_MASS, epoch, celestial_body="saturn", color="yellow")
+uranus = Body(URANAS_MASS, epoch, celestial_body="uranus", color="cyan")
+neptune = Body(NEPTUNE_MASS, epoch, celestial_body="neptune", color="cyan")
+mercury = Body(MERCURY_MASS, epoch, celestial_body="mercury", color="cyan")
+venus = Body(VENUS_MASS, epoch, celestial_body="venus", color="cyan")
+
 
 celestial_bodies = [sun, earth, moon, mars]
 
@@ -223,7 +245,8 @@ tranfer_orbit = Orbit(mu=SUN_MU)
 
 central_body = sun
 sat_orbit = tranfer_orbit
-bodies = [earth, mars]
+target_body = mars
+bodies = [earth, mars, mercury, jupiter, venus, saturn, uranus, neptune]
 
 # Earth @ depature and Mars @ arrival helio centric
 # Helito centric cords is ONLY FOR THE LAMBERT PROBLEM!!
@@ -254,7 +277,7 @@ n_steps_2 = len(ts)
 r_s = sat.r_ar[-1]
 r_c = get_body_barycentric(central_body.label, t0).xyz.to(u.km).value
 r0 = r_s - r_c
-v0 = tranfer_v1
+v0 = tranfer_v1*2
 y0 = np.concatenate((r0, v0))
 
 ys = np.zeros((n_steps_2, 6))
@@ -268,6 +291,7 @@ for i in range(len(ts) - 1):
         y_dot_n_ephemeris, dt, ts[step-1], ys[step-1], fun_arg=fun_arg)
     step += 1
 propagation_time_2 = time.perf_counter() - propagation_start_timer_2
+
 
 # Generating position of sat in terms of barycenter
 central_body.r_ar = np.zeros((n_steps_2, 3))

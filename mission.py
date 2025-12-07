@@ -92,11 +92,13 @@ Constants and Intialization
 program_start_timer = time.perf_counter()
 
 MOON_MASS = (7.34 * 10**22) * u.kg
-MARS_MASS = (6.39 * 10**23) * u.kg
 SAT_MASS = 100 * u.kg
 G = const.G.to(u.km**3 / (u.kg * u.s**2))  # convert to km
 SUN_MU = const.GM_sun.to(u.km**3 / u.s**2)
 EARTH_MU = const.GM_earth.to(u.km**3 / u.s**2)
+MARS_MASS = (6.39 * 10**23) * u.kg
+MARS_RAD = 3390 * u.km
+MARS_MU = MARS_MASS * G
 
 # Intialize bodies
 epoch = Time("2026-11-08")
@@ -106,11 +108,13 @@ earth = Body(const.M_earth, epoch, celestial_body="earth", color="green")
 moon = Body(MOON_MASS, epoch, celestial_body="moon", color='grey')
 mars = Body(MARS_MASS, epoch, celestial_body="mars", color="red")
 
+celestial_bodies = [sun, earth, moon, mars]
+
 # Intialize SAT
 SAT_MASS = 100*u.kg
 sat = Spacecraft(SAT_MASS, epoch, label="S/C", color="purple")
 
-# Define Parking Orbit
+# Define Earth Parking Orbit
 earth_parking = Orbit(mu=EARTH_MU,
                       a=32000*u.km,
                       e=0.80*u.km/u.km,  # unitless
@@ -124,9 +128,13 @@ earth_parking.p = earth_parking.calc_p(earth_parking.a, earth_parking.e)
 earth_parking.energy = earth_parking.calc_energy(
     earth_parking.a, earth_parking.mu)
 
+# Defne Mars Parking Orbit
+mars_parking = Orbit(mu=MARS_MU)
+
 """
-Propagating the earth parking orbit
+############ LEG-1: Propagating the earth parking orbit ############
 """
+print("\nLEG-1: Propagating the earth parking orbit\n")
 central_body = earth
 sat_orbit = earth_parking
 bodies = [moon]
@@ -150,7 +158,6 @@ y0 = np.concatenate((sat.r0.value, sat.v0.value))
 # Intiate Solver
 propagation_start_timer_1 = time.perf_counter()
 dt = TimeDelta(60, format='sec')
-# t0 = epoch - sat_orbit.period(sat_orbit.a, sat_orbit.mu)*2
 dt_steps = np.round(
     (sat_orbit.period(sat_orbit.a, sat_orbit.mu).value*2)/dt.value)
 t0 = epoch - dt*dt_steps + dt
@@ -189,9 +196,26 @@ sat.r_ar = sat_pos_bary
 sat.v_ar = sat_vel_bary
 sat.t_ar = ts
 
+# Saving all the data for LEG-1
+data_dict = {
+    "central_body": central_body,
+    "sat_orbit": sat_orbit,
+    "bodies": bodies,
+    "dt": dt,
+    "n_steps": n_steps_1,
+    "t0": t0,
+    "tf": tf,
+    "y0": y0,
+    "ts": ts,
+    "ys": ys
+}
+
+leg_1_data = np.save("leg_1_data", np.array(data_dict))
+
 """
-Propagating the earth mars Transfer
+############ LEG-2: Propagating the earth mars Transfer ############
 """
+print("\nLEG-2: Propagating the earth mars Transfer\n")
 # Defining Transfer Orbit
 tof = TimeDelta(180, format='jd')
 arrival_date = epoch + tof
@@ -221,18 +245,16 @@ tranfer_orbit.p = p * u.km
 # Intiate Solver
 propagation_start_timer_2 = time.perf_counter()
 dt = TimeDelta(86400, format='sec')
-dt_steps = np.round(tof.sec/dt.value)
 t0 = sat.t_ar[-1]
 tf = t0 + tof
 ts = np.arange(t0, tf, dt)
 n_steps_2 = len(ts)
 
-# Bary centric frame math
+# Calculting intial pos of sat in terms of central body
 r_s = sat.r_ar[-1]
 r_c = get_body_barycentric(central_body.label, t0).xyz.to(u.km).value
 r0 = r_s - r_c
 v0 = tranfer_v1
-
 y0 = np.concatenate((r0, v0))
 
 ys = np.zeros((n_steps_2, 6))
@@ -267,28 +289,109 @@ sat.r_ar = np.concatenate((sat.r_ar, sat_pos_bary))
 sat.v_ar = np.concatenate((sat.v_ar, sat_vel_bary))
 sat.t_ar = np.concatenate((sat.t_ar, ts))
 
+# Saving all the data for LEG-2
+data_dict = {
+    "central_body": central_body,
+    "sat_orbit": sat_orbit,
+    "bodies": bodies,
+    "dt": dt,
+    "n_steps": n_steps_2,
+    "t0": t0,
+    "tf": tf,
+    "y0": y0,
+    "ts": ts,
+    "ys": ys
+}
+
+leg_2_data = np.save("leg_2_data", np.array(data_dict))
+
+
+"""
+############ LEG-3: Propagating Mars insertion ############
+"""
+print("\nLEG-3: Propagating Mars insertion\n")
+
+central_body = mars
+sat_orbit = mars_parking
+bodies = []
+
+# Intiate Solver
+propagation_start_timer_3 = time.perf_counter()
+dt = TimeDelta(180, format='sec')
+t0 = sat.t_ar[-1]
+tf = t0 + TimeDelta(86400*3, format='sec')
+ts = np.arange(t0, tf, dt)
+n_steps_3 = len(ts)
+
+# Calculting intial pos of sat in terms of central body
+r_s = sat.r_ar[-1]
+r, v = get_body_barycentric_posvel(central_body.label, t0)
+r_c = r.xyz.to(u.km).value
+v_c = v.xyz.to(u.km/u.s).value
+r0 = r_s - r_c
+# UNSURE ABOUT THIS!!!!!
+v0 = (sat.v_ar[-1] - v_c) - v_c  # UNSURE ABOUT THIS!!!!!
+y0 = np.concatenate((r0, v0))
+
+ys = np.zeros((n_steps_3, 6))
+ys[0] = y0
+ts[0] = t0
+fun_arg = [central_body, bodies]
+
+step = 1
+for i in range(len(ts) - 1):
+    ys[step] = RK4_single_step(
+        y_dot_n_ephemeris, dt, ts[step-1], ys[step-1], fun_arg=fun_arg)
+    step += 1
+propagation_time_3 = time.perf_counter() - propagation_start_timer_3
+
+# Generating position of sat in terms of barycenter
+central_body.r_ar = np.zeros((n_steps_3, 3))
+central_body.v_ar = np.zeros((n_steps_3, 3))
+sat_pos_bary = np.zeros((n_steps_3, 3))
+sat_vel_bary = np.zeros((n_steps_3, 3))
+for i, t in enumerate(ts):
+    r, v = get_body_barycentric_posvel(
+        central_body.label, t)
+
+    central_body.r_ar[i] = r.xyz.to(u.km)
+    central_body.v_ar[i] = v.xyz.to(u.km/u.s)
+
+for i in range(len(ts)):
+    sat_pos_bary[i] = central_body.r_ar[i] + ys[i, 0:3]   # r_s = r_c + r
+    sat_vel_bary[i] = central_body.v_ar[i] + ys[i, 3:6]
+
+sat.r_ar = np.concatenate((sat.r_ar, sat_pos_bary))
+sat.v_ar = np.concatenate((sat.v_ar, sat_vel_bary))
+sat.t_ar = np.concatenate((sat.t_ar, ts))
+
+
+# Saving all the data for LEG-2
+data_dict = {
+    "central_body": central_body,
+    "sat_orbit": sat_orbit,
+    "bodies": bodies,
+    "dt": dt,
+    "n_steps": n_steps_3,
+    "t0": t0,
+    "tf": tf,
+    "y0": y0,
+    "ts": ts,
+    "ys": ys
+}
+
+leg_3_data = np.save("leg_3_data", np.array(data_dict))
+
+
+np.savez("mission_data", np.array(sat), celestial_bodies)
 print(f'------------------------------------------------------------------------')
 print(f'Leg 1 Propagation took {propagation_time_1} seconds')
 print(f'Leg 2 Propagation took {propagation_time_2} seconds')
+print(f'Leg 3 Propagation took {propagation_time_3} seconds')
 print(
     f'Python Script took {time.perf_counter() - program_start_timer} seconds')
 print(f'------------------------------------------------------------------------')
 
-print("BREAL")
-
-
-ax = plt.figure().add_subplot(projection='3d')
-ax.plot(sat.r_ar[:, 0], sat.r_ar[:, 1], sat.r_ar[:, 2],
-        color=sat.color, label=sat.label)
-
-ax.set_title(f"Barycenter Frame", fontsize=14, pad=10)
-ax.set_aspect('equal')
-ax.set_xlabel("X [km]")
-ax.set_ylabel("Y [km]")
-ax.set_zlabel("Z [km]")
-ax.legend(loc='center left', bbox_to_anchor=(1.25, 0.5))
-plt.tight_layout()
-plt.show()
 
 # for body in bodies:
 #     body.t_ar = ts

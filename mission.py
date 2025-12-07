@@ -4,7 +4,7 @@ n-body. Trying to do n-body propagation
 
 # Custom libs
 from orbit import *
-from orbit_util import *
+from Orbit_util import *
 from body import *
 from Universal_Variable import *
 

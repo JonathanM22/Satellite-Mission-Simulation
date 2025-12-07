@@ -15,7 +15,7 @@ from astropy.coordinates import solar_system_ephemeris
 from astropy.coordinates import get_body_barycentric_posvel
 from Universal_Variable import *
 from poliastro.iod import izzo
-from poliastro.bodies import Sun    
+from poliastro.bodies import Sun
 from poliastro.iod import vallado
 
 # Constants
@@ -43,12 +43,12 @@ mars = Orbit(a=1.52371034*AU,
              mu=SUN_MU)
 
 
-venus = Orbit(a=0.72333566*AU, 
-              e=0.00677672, 
+venus = Orbit(a=0.72333566*AU,
+              e=0.00677672,
               inc=3.39467605,
-              raan= 76.67984255,
+              raan=76.67984255,
               aop=131.60246718,
-              mu = SUN_MU)
+              mu=SUN_MU)
 
 
 transfer_short = Orbit(mu=SUN_MU)
@@ -63,9 +63,11 @@ tof = TimeDelta(100, format='jd')
 arrival_date = depature_date + tof
 print(f'{arrival_date}\n')
 
-r1_earth_eph, v1_earth_eph = get_body_barycentric_posvel('earth', depature_date)
+r1_earth_eph, v1_earth_eph = get_body_barycentric_posvel(
+    'earth', depature_date)
 r1_mars_eph, v1_mars_eph = get_body_barycentric_posvel('mars', depature_date)
-r1_venus_eph,v1_venus_eph = get_body_barycentric_posvel('venus',depature_date)
+r1_venus_eph, v1_venus_eph = get_body_barycentric_posvel(
+    'venus', depature_date)
 
 
 """
@@ -91,9 +93,12 @@ v1_venus = (v1_venus_eph.xyz - v_sun1.xyz).to(u.m/u.s).value  # type:ignore
 Propogate from JPL data to get the arrivial position of the bodies. 
 """
 dt = 86400
-earth_rs, earth_vs = propogate_orbit(r1_earth, v1_earth, earth.mu, tspan=tof.sec, dt=dt)
-mars_rs, mars_vs = propogate_orbit( r1_mars, v1_mars, mars.mu, tspan=tof.sec, dt=dt)
-venus_rs, venus_vs = propogate_orbit( r1_venus, v1_venus, venus.mu, tspan=tof.sec, dt=dt)
+earth_rs, earth_vs = propogate_orbit(
+    r1_earth, v1_earth, earth.mu, tspan=tof.sec, dt=dt)
+mars_rs, mars_vs = propogate_orbit(
+    r1_mars, v1_mars, mars.mu, tspan=tof.sec, dt=dt)
+venus_rs, venus_vs = propogate_orbit(
+    r1_venus, v1_venus, venus.mu, tspan=tof.sec, dt=dt)
 
 r2_mars = mars_rs[-1]
 v2_mars = mars_vs[-1]
@@ -107,43 +112,53 @@ Solving for lamberts.
 
 # (v1_short, v2_short),= izzo.lambert(k, r1_earth*u.m, r2_mars*u.m , (tof.sec*u.s))
 print("VALLADO FUNCTION")
-(v1_short, v2_short),= vallado.lambert(k, r1_earth*u.m, r2_mars*u.m , (tof.sec*u.s),short=True)
+(v1_short, v2_short), = vallado.lambert(
+    k, r1_earth*u.m, r2_mars*u.m, (tof.sec*u.s), short=True)
 print("Short Orbit Transfer")
 print(f"Departure velocity: {v1_short}")
 print(f"Arrival velocity: {v2_short}\n")
 
-(v1_long, v2_long),= vallado.lambert(k, r1_earth*u.m, r2_mars*u.m , (tof.sec*u.s),short=False)
+(v1_long, v2_long), = vallado.lambert(
+    k, r1_earth*u.m, r2_mars*u.m, (tof.sec*u.s), short=False)
 print("Long Orbit Transfer")
 print(f"Departure velocity: {v1_long}")
 print(f"Arrival velocity: {v2_long}\n")
 
 print("JONS FUNCTION")
 print("Short Orbit Transfer")
-transfer_short.a, transfer_short.p, transfer_short.e, transfer_short_v1, transfer_short_v2 = lambert_solver(r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='short')
-print(f'Short Transfer semi major axis is {transfer_short.a/1000} km -->  {(transfer_short.a/1000/149597870.7)} AU ')
+transfer_short.a, transfer_short.p, transfer_short.e, transfer_short_v1, transfer_short_v2 = lambert_solver(
+    r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='short')
+print(
+    f'Short Transfer semi major axis is {transfer_short.a/1000} km -->  {(transfer_short.a/1000/149597870.7)} AU ')
 print(f'Short Transfer Eccentricity is: {transfer_short.e}')
 print(f'Departure velocity: {transfer_short_v1/1000} km/s')
 print(f'Arrival velocity: {transfer_short_v2/1000} km/s\n')
 
 print("Long Orbit Transfer")
-transfer_long.a, transfer_long.p, transfer_long.e, transfer_long_v1, transfer_long_v2 = lambert_solver(r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='long')
-print(f'Long Transfer semi major axis is {transfer_long.a/1000} km --> {(transfer_long.a/1000/149597870.7)} AU')
+transfer_long.a, transfer_long.p, transfer_long.e, transfer_long_v1, transfer_long_v2 = lambert_solver(
+    r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='long')
+print(
+    f'Long Transfer semi major axis is {transfer_long.a/1000} km --> {(transfer_long.a/1000/149597870.7)} AU')
 print(f'Long Transfer Eccentricity is: {transfer_long.e}')
 print(f'Departure velocity: {transfer_long_v1/1000} km/s')
 print(f'Arrival velocity: {transfer_long_v2/1000} km/s\n')
 
 print("VRAJ FUNCTION")
 print("Short Orbit Transfer")
-transfer_short.a, transfer_short.p, transfer_short.e, transfer_short_v1, transfer_short_v2 = universal_lambert( r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='short')
-print(f'Short Transfer semi major axis is {transfer_short.a/1000} km -->  {(transfer_short.a/1000/149597870.7)} AU ')
+transfer_short.a, transfer_short.p, transfer_short.e, transfer_short_v1, transfer_short_v2 = universal_lambert(
+    r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='short')
+print(
+    f'Short Transfer semi major axis is {transfer_short.a/1000} km -->  {(transfer_short.a/1000/149597870.7)} AU ')
 print(f'Short Transfer Eccentricity is: {transfer_short.e}')
 print(f'Departure velocity: {transfer_short_v1/1000} km/s')
 print(f'Arrival velocity: {transfer_short_v2/1000} km/s\n')
 
 
 print("Long Orbit Transfer")
-transfer_long.a, transfer_long.p, transfer_long.e, transfer_long_v1, transfer_long_v2 = universal_lambert(r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='long')
-print(f'Long Transfer semi major axis is {transfer_long.a/1000} km --> {(transfer_long.a/1000/149597870.7)} AU')
+transfer_long.a, transfer_long.p, transfer_long.e, transfer_long_v1, transfer_long_v2 = universal_lambert(
+    r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='long')
+print(
+    f'Long Transfer semi major axis is {transfer_long.a/1000} km --> {(transfer_long.a/1000/149597870.7)} AU')
 print(f'Long Transfer Eccentricity is: {transfer_long.e}')
 print(f'Departure velocity: {transfer_long_v1/1000} km/s')
 print(f'Arrival velocity: {transfer_long_v2/1000} km/s')

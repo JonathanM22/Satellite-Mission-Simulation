@@ -9,10 +9,10 @@ from orbit import *
 import numpy as np
 from scipy.integrate import ode
 from scipy import optimize
-import matplotlib.pyplot as plt 
+import matplotlib.pyplot as plt
 import time
 from multiprocessing import Pool
-from Orbit_util import *
+from orbit_util import *
 from astropy.time import Time
 from astropy.time import TimeDelta
 from astropy import units as u
@@ -144,7 +144,7 @@ def main():
     delta_v_long_arr = np.zeros(date_info.shape)
     tof_days_arr = np.zeros(date_info.shape)
 
-    with Pool(7) as pool:
+    with Pool(10) as pool:
         results = pool.map(
             porkchop_point, date_info.flatten())
 

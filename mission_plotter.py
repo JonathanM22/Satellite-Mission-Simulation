@@ -21,6 +21,11 @@ result = np.load("mission_data.npz", allow_pickle=True)
 sat = result['arr_0'][()]
 celestial_bodies = result['arr_1']
 
+# Plotting options
+plot_leg_1 = True
+plot_leg_2 = True
+plot_leg_3 = True
+
 """
 Plot LEG-1
 """
@@ -37,7 +42,6 @@ y0 = leg_1_data["y0"]
 ts = leg_1_data["ts"]
 ys = leg_1_data["ys"]
 
-plot_leg_1 = False
 if plot_leg_1:
 
     # Filling pos and vel data for all celestial bodies
@@ -109,7 +113,6 @@ y0 = leg_2_data["y0"]
 ts = leg_2_data["ts"]
 ys = leg_2_data["ys"]
 
-plot_leg_2 = False
 if plot_leg_2:
 
     # Filling pos and vel data for all celestial bodies
@@ -180,7 +183,7 @@ y0 = leg_3_data["y0"]
 ts = leg_3_data["ts"]
 ys = leg_3_data["ys"]
 
-plot_leg_3 = True
+
 if plot_leg_3:
 
     # Filling pos and vel data for all celestial bodies

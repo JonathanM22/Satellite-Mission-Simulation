@@ -277,7 +277,7 @@ n_steps_2 = len(ts)
 r_s = sat.r_ar[-1]
 r_c = get_body_barycentric(central_body.label, t0).xyz.to(u.km).value
 r0 = r_s - r_c
-v0 = tranfer_v1*2
+v0 = tranfer_v1
 y0 = np.concatenate((r0, v0))
 
 ys = np.zeros((n_steps_2, 6))
@@ -354,7 +354,8 @@ r_c = r.xyz.to(u.km).value
 v_c = v.xyz.to(u.km/u.s).value
 r0 = r_s - r_c
 # UNSURE ABOUT THIS!!!!!
-v0 = (sat.v_ar[-1] - v_c) - v_c  # UNSURE ABOUT THIS!!!!!
+# (desired vel - sat vel) - mars_frame_correction
+v0 = (v_c*1.35 - sat.v_ar[-1]) - v_c  # UNSURE ABOUT THIS!!!!!
 y0 = np.concatenate((r0, v0))
 
 ys = np.zeros((n_steps_3, 6))

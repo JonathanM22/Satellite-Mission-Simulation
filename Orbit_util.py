@@ -22,7 +22,7 @@ def lambert_solver(r1_vec, r2_vec, tof, mu, desired_path='short'):
         delta_f = np.arccos((np.dot(r1_vec, r2_vec)) / (r1*r2))
     elif desired_path == 'long':
         delta_f = (2*np.pi) - np.arccos((np.dot(r1_vec, r2_vec)) / (r1*r2))
-    print(f'Delta F: {np.rad2deg(delta_f)} deg')
+    # print(f'Delta F: {np.rad2deg(delta_f)} deg')
 
     # Calc chord and space triangel perimeter
     c = np.sqrt(r1**2 + r2**2 - 2*r1*r2*np.cos(delta_f))  # type:ignore

@@ -144,7 +144,7 @@ def main():
     delta_v_long_arr = np.zeros(date_info.shape)
     tof_days_arr = np.zeros(date_info.shape)
 
-    with Pool(10) as pool:
+    with Pool(7) as pool:
         results = pool.map(
             porkchop_point, date_info.flatten())
 

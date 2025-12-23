@@ -18,9 +18,11 @@ class Body:
     def __init__(self, mass, epoch, r0=0, v0=0, celestial_body=False, label='unlabeled', color='black'):
         self.mass = mass
         self.epoch = epoch
-        self.r_ar = []  # position array
-        self.v_ar = []  # velocity array
-        self.t_ar = []  # time array
+        self.r_ar = np.zeros(3)  # position array
+        self.v_ar = np.zeros(3)  # velocity array
+        self.t_ar = np.zeros(3)  # time array
+        self.energy_ar = np.zeros(1)
+        self.h_ar = np.zeros(1)
 
         # Atr mostly for plotting
         self.label = label
@@ -37,7 +39,7 @@ class Body:
         else:
             self.r0 = r0
             self.v0 = v0
-    
+
 
 class Spacecraft(Body):
 
@@ -46,7 +48,4 @@ class Spacecraft(Body):
                          celestial_body=False, label=None, color=None)
 
         self.inertia = np.zeros((3, 3))
-        self.energy_ar = []
-        self.h_ar = []
-        self.central_body = None
-        self.model = ''
+        self.model = ""

@@ -9,67 +9,29 @@ from scipy import optimize
 class Orbit:
     """
     Intializes orbit class with 6 orbital elements. 
-
-    e: vector
-    e_mag: magnitude 
     """
 
-    def __init__(self, mu, a=None, e=None, f0=None, inc=None, raan=None, aop=None, e_vec=np.zeros(3)):
+    def __init__(self, mu, a=0, e=0, f0=0, inc=0, raan=0, aop=0, e_vec=np.zeros(3)):
         self.a = a
         self.e = e
-        self.f0 = f0
         self.e_vec = e_vec
+        self.f0 = f0
         self.inc = inc
         self.raan = raan
         self.aop = aop
         self.mu = mu
-        self.h = np.zeros(2)
-        self.p = None
-        self.energy = None
+        self.h = 0
+        self.p = 0
+        self.energy = 0
 
-    def r_at_true_anomaly(self, f):
-        """
-        Returns r scalor using orbit equation 
-        """
-        try:
-            return self.calc_p() / (1 + self.e*np.cos(f))
-        except:
-            raise ValueError(
-                "r_at_true_anomaly cannot be calculated. Check a, e or f")
+    def r_at_true_anomaly(self, e, p, f):
+        return p / (1 + e*np.cos(f))
 
-    def calc_energy(self):
-        """
-        Returns orbit energy 
-        """
-        if self.energy is not None:
-            return self.energy
-        else:
-            try:
-                return (-self.mu) / (2*self.a)  # type:ignore
-            except:
-                raise ValueError(
-                    "Orbit energy  cannot be calculated. Check a")
+    def calc_energy(self, a, mu):
+        return (-mu) / (2*a)
 
-    def calc_p(self):
-        """
-        Returns semilatus rectum  
-        """
-        if self.p is not None:
-            return self.p
-        else:
-            try:
-                return self.a * (1 - self.e**2)  # type:ignore
-            except:
-                raise ValueError(
-                    "Orbit semilatus rectum cannot be calculated. Check a or e")
+    def calc_p(self, a, e):
+        return a * (1 - e**2)
 
-    def period(self):
-        """
-        Calculates period or orbit.
-        Returns period in seconds
-        """
-        try:
-            return (2*np.pi)*np.sqrt(self.a**3/self.mu)  # type:ignore
-        except:
-            raise ValueError(
-                "Orbit has period cannot be calculated. Check a or mu")
+    def period(self, a, mu):
+        return (2*np.pi)*np.sqrt(a**3/mu)

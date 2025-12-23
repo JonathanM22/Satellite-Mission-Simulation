@@ -9,10 +9,10 @@ from orbit import *
 import numpy as np
 from scipy.integrate import ode
 from scipy import optimize
-import matplotlib.pyplot as plt 
+import matplotlib.pyplot as plt
 import time
 from multiprocessing import Pool
-from Orbit_util import *
+from orbit_util import *
 from astropy.time import Time
 from astropy.time import TimeDelta
 from astropy import units as u

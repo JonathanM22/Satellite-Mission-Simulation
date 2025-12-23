@@ -39,6 +39,7 @@ def stumpff_constraint(psi, H0, eta, eps, M):
     # set K = K-1 --> solve C3 and C2 using eqns
     # set psi = 4*psi and repeat until K = 0
 
+
 def stumpff_C2_C3(psi, psi_m=1, eps=1e-12, M=50):
 
     K = 0
@@ -123,20 +124,20 @@ if __name__ == "__main__":
 '''
 # Algorithm 3: Universal Lambert Solver
 
-# clean up input r1 r2 TOF, run cases to assign PSI's 
+# clean up input r1 r2 TOF, run cases to assign PSI's
 # want to keep psi's the way they are irregardless of orbit type
-# full out lambert to solve for a 
+# full out lambert to solve for a
 # first set up lamberts to solve for a,e,p then figure out way to mess with stumpff psi values, then fix to only input r1 r2 tof
 
 
-# import poliastro and check with their function --> verify with their example 
+# import poliastro and check with their function --> verify with their example
 # possibly work with izzo
-#--------------------------------------------------------------------------------------------------------------------
-def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
+# --------------------------------------------------------------------------------------------------------------------
+def universal_lambert(r1_vec, r2_vec, TOF, mu, desired_path='short'):
 
     r1 = np.linalg.norm(r1_vec)
     r2 = np.linalg.norm(r2_vec)
-    
+
     # actual_angle = np.arccos(np.dot(r1_vec, r2_vec) / (r1 * r2))
     # print(f'Actual angle between position vectors: {np.rad2deg(actual_angle):.2f} deg')
 
@@ -144,12 +145,12 @@ def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
         delta_f = np.arccos((np.dot(r1_vec, r2_vec)) / (r1*r2))
     elif desired_path == 'long':
         delta_f = (2*np.pi) - np.arccos((np.dot(r1_vec, r2_vec)) / (r1*r2))
-    print(f'Delta F: {np.rad2deg(delta_f)} deg')
-    
-    c = np.sqrt(r1**2 + r2**2 - 2*r1*r2*np.cos(delta_f)) 
+    # print(f'Delta F: {np.rad2deg(delta_f)} deg')
+
+    c = np.sqrt(r1**2 + r2**2 - 2*r1*r2*np.cos(delta_f))
     s = (r1 + r2 + c) / 2
 
-    if 0 <= delta_f < np.pi:  
+    if 0 <= delta_f < np.pi:
         t_parab = (1/3) * np.sqrt(2/mu) * (s**(3/2) - ((s-c)**(3/2)))
     elif np.pi <= delta_f < 2*np.pi:
         t_parab = (1/3) * np.sqrt(2/mu) * (s**(3/2) + ((s-c)**(3/2)))
@@ -171,7 +172,7 @@ def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
         psi_lower = -2
         # print("Transfer Orbit is Hyperbolic")
 
-#     
+#
 #     # Calculate minumum transfer
 #     a_m = s/2
 #     alpha_m = np.pi
@@ -200,7 +201,7 @@ def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
 #         def lambert_eq(a): return ((np.sqrt(a**3)) * (alpha(a) - np.sin(alpha(a)) - beta(a) + np.sin(beta(a)))) - ((np.sqrt(mu))*TOF)
 
 #         a = optimize.brentq(lambert_eq, a_m, a_m*100)
-#         p = (((4*a)*(s-r1)*(s-r2))/(c**2)) * (np.sin((alpha(a) + beta(a))/2)**2)  
+#         p = (((4*a)*(s-r1)*(s-r2))/(c**2)) * (np.sin((alpha(a) + beta(a))/2)**2)
 #         e = np.sqrt(1 - (p/a))
 
 #     elif TOF < t_parab: # hyperbolic case
@@ -212,9 +213,9 @@ def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
 #             def lambert_eq(a): return ((np.sqrt((-a)**3)) * (np.sinh(alpha_h(a)) - alpha_h(a) - np.sinh(beta_h(a)) + beta_h(a))) - (np.sqrt(mu)*TOF)
 #         elif np.pi <= delta_f < 2*np.pi:
 #             def lambert_eq(a): return ((np.sqrt((-a)**3)) * (np.sinh(alpha_h(a)) - alpha_h(a) + np.sinh(beta_h(a)) - beta_h(a))) - (np.sqrt(mu)*TOF)
-        
+
 #         a = optimize.brentq(lambert_eq, -a_m*1000, -a_m)
-#         p = (((4*(-a))*(s-r1)*(s-r2))/(c**2)) * (np.sinh((alpha_h(a) + beta_h(a))/2)**2) 
+#         p = (((4*(-a))*(s-r1)*(s-r2))/(c**2)) * (np.sinh((alpha_h(a) + beta_h(a))/2)**2)
 #         e = np.sqrt(1 - (p/a))
 
     gamma = np.dot(r1_vec, r2_vec) / (r1 * r2)
@@ -224,10 +225,11 @@ def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
     elif desired_path == "long":
         t_m = -1
 
-    A =  t_m*(r1 * r2 * (1 + gamma))**0.5
+    A = t_m*(r1 * r2 * (1 + gamma))**0.5
     if abs(A) < 0:
         # this line was suggested by VS code: I was gonna have a print statement here
-        raise ValueError("Transfer angle is 180 degrees; Lambert's problem is undefined.")
+        raise ValueError(
+            "Transfer angle is 180 degrees; Lambert's problem is undefined.")
 
     psi = psi_0
 
@@ -281,8 +283,10 @@ def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
     G = A * np.sqrt(B/mu)
     G_dot = 1 - B/r2
 
-    v1_vec = 1/G * np.array([r2_vec[0] - F * r1_vec[0], r2_vec[1] - F * r1_vec[1], r2_vec[2] - F * r1_vec[2]])
-    v2_vec = 1/G * np.array([G_dot * r2_vec[0] - r1_vec[0], G_dot * r2_vec[1] - r1_vec[1], G_dot * r2_vec[2] - r1_vec[2]])
+    v1_vec = 1/G * np.array([r2_vec[0] - F * r1_vec[0],
+                            r2_vec[1] - F * r1_vec[1], r2_vec[2] - F * r1_vec[2]])
+    v2_vec = 1/G * np.array([G_dot * r2_vec[0] - r1_vec[0], G_dot *
+                            r2_vec[1] - r1_vec[1], G_dot * r2_vec[2] - r1_vec[2]])
 
     h = np.cross(r1_vec, v1_vec)
     e = np.linalg.norm((np.cross(v1_vec, h)/mu) - (r1_vec/r1))
@@ -296,11 +300,10 @@ def universal_lambert(r1_vec, r2_vec, TOF, mu,desired_path = 'short'):
     # print(f"Orbit is {orbit_type} with eccentricity {e:.10f}")
 
     # SMA = - mu / (2 * ( .5*np.linalg.norm(v2_vec**2 ) - (mu/r2)))
-    a = - mu / (2 * ( .5*np.linalg.norm(v1_vec)**2 - (mu/r1)))
+    a = - mu / (2 * (.5*np.linalg.norm(v1_vec)**2 - (mu/r1)))
     p = a*(1-e**2)
 
-
-    return a,p,e,v1_vec,v2_vec
+    return a, p, e, v1_vec, v2_vec
 
     # return v1_vec, v2_vec, B, chi, psi, SMA
 # --------------------------------------------------------------------------------------------------------------------

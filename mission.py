@@ -28,18 +28,19 @@ from astropy.coordinates import get_body_barycentric
 Functions
 """
 
-
+# Sets up single Runge Kutta 4 Step
 def RK4_single_step(fun, dt, t0, y0, fun_arg: list):
-
+    
+    # evaluates inputted function, fun, at t0, y0, and inputted args to create 4 constants to solve 1 rk4 step
+    # inputted function name --> y_dot_n_ephemeris
     k1 = fun(t0, y0, fun_arg)
     k2 = fun((t0 + (dt/2)), (y0 + ((dt.value/2)*k1)), fun_arg)
     k3 = fun((t0 + (dt/2)), (y0 + ((dt.value/2)*k2)), fun_arg)
     k4 = fun((t0 + dt), (y0 + (dt.value*k3)), fun_arg)
-
     y1 = y0 + (dt.value/6)*(k1 + 2*k2 + 2*k3 + k4)
     return y1
 
-
+# Two body motion ODE: creating the y_dot function for n-body with ephemeris data
 def y_dot_n_ephemeris(t, y, fun_arg: list):
     """
         t: astropy time object
@@ -51,83 +52,125 @@ def y_dot_n_ephemeris(t, y, fun_arg: list):
         r_c = distance from origin -> central body
         r_k = distance from origin -> kth body
         r_sk = distance from sat -> kth body
-        r_s = 
-
+        r_s = distance from barycenter -> sat
         m_c = central body mass
         m_k = kth body mass
+        r_ck = distance from central body -> kth body
     """
-    fun_arg[0] = central_body
-    fun_arg[1] = bodies
+    central_body = fun_arg[0]
+    bodies = fun_arg[1]
 
-    r = y[0:3]
+    # r = distance from central body -> sat
+    r = y[0:3]  
     r_mag = np.linalg.norm(r)
     v = y[3:6]
 
+    # r_c = distance from origin -> central body
     r_c = get_body_barycentric(central_body.label, t).xyz.to(u.km).value
     m_c = central_body.mass.value
 
-    a = ((G.value*m_c)/(r_mag**3)) * -r
-
+    central_body.mu = G.value * m_c
+    # acceleration on satellite due to central body
+    a = ((central_body.mu)/(r_mag**3)) * -r
     # print(f'Accel from CB: {a}')
 
     for body in bodies:
+
+        #  # r_s = r_c + r
+        # r_sk = r_k - r_s
+        # r_k = distance from origin -> kth body
+
         r_k = get_body_barycentric(body.label, t).xyz.to(u.km).value
         m_k = body.mass.value
 
-        # r_s = r_c + r
-        # r_sk = r_k - r_s
+        # r_s = distance from barycenter -> sat 
+        # r_sk = distance from sat -> kth body
+        # r_ck = distance from central body -> kth body
 
         r_ck = r_k - r_c
         r_sk = r_ck - r
-
         r_sk_mag = np.linalg.norm(r_sk)
 
-        a_k = (((G.value*m_k)/(r_sk_mag**3)) * r_sk)
+        body.mu = G.value * m_k
+        # acceleration on satellite due to kth bodies
+        a_k = ((body.mu)/(r_sk_mag**3)) * r_sk
         # print(f'Accel from {body.label}: {a_k}')
 
+        # total acceleration on satellite due to all bodies
         a = a + a_k
 
     y_dot = np.concatenate((v, a))
 
     return y_dot
 
+def propagate_rk4(r0, v0, t0, tf, dt, fun_arg: list):
+    # time array equally by dt
+    ts = np.arange(t0, tf, dt)
+    n_steps = len(ts)
+    ys = np.zeros((n_steps, 6))
+    y0 = np.concatenate((r0, v0))
+    ys[0] = y0
+    step = 1
+    for i in range(n_steps - 1):
+        ys[i+1] = RK4_single_step(y_dot_n_ephemeris, dt, ts[i], ys[i], fun_arg=fun_arg)
+        step += 1
+    r = ys[:, :3]
+    v = ys[:, 3:6]
+
+    return r, v, ys
 
 """
 Constants and Intialization
 """
 program_start_timer = time.perf_counter()
 
-MOON_MASS = (7.34 * 10**22) * u.kg
 SAT_MASS = 100 * u.kg
 G = const.G.to(u.km**3 / (u.kg * u.s**2))  # convert to km
+MOON_MASS = (7.34 * 10**22) * u.kg
+MOON_MU = (MOON_MASS * G).value
 SUN_MASS = const.M_sun
 SUN_MU = const.GM_sun.to(u.km**3 / u.s**2)
 EARTH_MASS = const.M_earth
 EARTH_MU = const.GM_earth.to(u.km**3 / u.s**2)
 MARS_MASS = (6.39 * 10**23) * u.kg
 MARS_RAD = 3390 * u.km
-MARS_MU = MARS_MASS * G
+MARS_MU = (MARS_MASS * G).value
 JUPITER_MASS = const.M_jup
 JUPITER_MU = const.GM_jup.to(u.km**3 / u.s**2)
 SATURN_MASS = (5.638 * 10**26) * u.kg
+SATURN_MU = (SATURN_MASS * G).value
 URANAS_MASS = (8.681 * 10**25) * u.kg
+URANUS_MU = (URANAS_MASS * G).value
 NEPTUNE_MASS = (1.024 * 10**26) * u.kg
+NEPTUNE_MU = (NEPTUNE_MASS * G).value
 MERCURY_MASS = (3.285 * 10**23) * u.kg
+MERCURY_MU = (MERCURY_MASS * G).value
 VENUS_MASS = (4.867 * 10**24) * u.kg
+VENUS_MU = (VENUS_MASS * G).value
 
 # Intialize bodies
 epoch = Time("2026-11-08")
 solar_system_ephemeris.set('de432s')
 sun = Body(SUN_MASS, epoch, celestial_body='sun', color="yellow")
+sun.mu = SUN_MU.value
 earth = Body(EARTH_MASS, epoch, celestial_body="earth", color="green")
+earth.mu = EARTH_MU.value
 moon = Body(MOON_MASS, epoch, celestial_body="moon", color='grey')
+moon.mu = MOON_MU
 mars = Body(MARS_MASS, epoch, celestial_body="mars", color="red")
+mars.mu = MARS_MU
 jupiter = Body(JUPITER_MASS, epoch, celestial_body="jupiter", color="orange")
+jupiter.mu = JUPITER_MU.value
 saturn = Body(SATURN_MASS, epoch, celestial_body="saturn", color="yellow")
+saturn.mu = SATURN_MU
 uranus = Body(URANAS_MASS, epoch, celestial_body="uranus", color="cyan")
+uranus.mu = URANUS_MU
 neptune = Body(NEPTUNE_MASS, epoch, celestial_body="neptune", color="cyan")
+neptune.mu = NEPTUNE_MU
 mercury = Body(MERCURY_MASS, epoch, celestial_body="mercury", color="cyan")
+mercury.mu = MERCURY_MU
 venus = Body(VENUS_MASS, epoch, celestial_body="venus", color="cyan")
+venus.mu = VENUS_MU
 
 
 celestial_bodies = [sun, earth, moon, mars]
@@ -147,8 +190,7 @@ earth_parking = Orbit(mu=EARTH_MU,
                       )
 
 earth_parking.p = earth_parking.calc_p(earth_parking.a, earth_parking.e)
-earth_parking.energy = earth_parking.calc_energy(
-    earth_parking.a, earth_parking.mu)
+earth_parking.energy = earth_parking.calc_energy( earth_parking.a, earth_parking.mu)
 
 # Defne Mars Parking Orbit
 mars_parking = Orbit(mu=MARS_MU)
@@ -191,11 +233,13 @@ ys[0] = y0
 ts[0] = t0
 fun_arg = [central_body, bodies]
 
-step = 1
-for i in range(len(ts) - 1):
-    ys[step] = RK4_single_step(
-        y_dot_n_ephemeris, dt, ts[step-1], ys[step-1], fun_arg=fun_arg)
-    step += 1
+# step = 1
+# for i in range(len(ts) - 1):
+#     ys[step] = RK4_single_step(
+#         y_dot_n_ephemeris, dt, ts[step-1], ys[step-1], fun_arg=fun_arg)
+#     step += 1
+
+r, v, ys = propagate_rk4(sat.r0.value, sat.v0.value, t0, tf, dt, fun_arg)
 propagation_time_1 = time.perf_counter() - propagation_start_timer_1
 
 # Generating position of SAT in terms of barycenter
@@ -285,13 +329,14 @@ ys[0] = y0
 ts[0] = t0
 fun_arg = [central_body, bodies]
 
-step = 1
-for i in range(len(ts) - 1):
-    ys[step] = RK4_single_step(
-        y_dot_n_ephemeris, dt, ts[step-1], ys[step-1], fun_arg=fun_arg)
-    step += 1
-propagation_time_2 = time.perf_counter() - propagation_start_timer_2
+# step = 1
+# for i in range(len(ts) - 1):
+#     ys[step] = RK4_single_step(
+#         y_dot_n_ephemeris, dt, ts[step-1], ys[step-1], fun_arg=fun_arg)
+#     step += 1
 
+r, v, ys = propagate_rk4(r0,v0, t0, tf, dt, fun_arg)
+propagation_time_2 = time.perf_counter() - propagation_start_timer_2
 
 # Generating position of sat in terms of barycenter
 central_body.r_ar = np.zeros((n_steps_2, 3))
@@ -363,11 +408,13 @@ ys[0] = y0
 ts[0] = t0
 fun_arg = [central_body, bodies]
 
-step = 1
-for i in range(len(ts) - 1):
-    ys[step] = RK4_single_step(
-        y_dot_n_ephemeris, dt, ts[step-1], ys[step-1], fun_arg=fun_arg)
-    step += 1
+# step = 1
+# for i in range(len(ts) - 1):
+#     ys[step] = RK4_single_step(
+#         y_dot_n_ephemeris, dt, ts[step-1], ys[step-1], fun_arg=fun_arg)
+#     step += 1
+
+r, v, ys = propagate_rk4(r0,v0, t0, tf, dt, fun_arg)
 propagation_time_3 = time.perf_counter() - propagation_start_timer_3
 
 # Generating position of sat in terms of barycenter

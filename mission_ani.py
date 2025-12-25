@@ -26,6 +26,10 @@ from astropy.coordinates import get_body_barycentric
 # Change to reflect your file location!
 plt.rcParams['animation.ffmpeg_path'] = r"C:\Users\jonam\Desktop\Aero-Project\ffmpeg-master-latest-win64-gpl\ffmpeg-master-latest-win64-gpl\bin\ffmpeg.exe"
 
+dpi = 150
+fps = 10
+pause = 2
+
 # Plot Setting
 plot_leg_1 = False
 plot_leg_2 = False
@@ -76,10 +80,10 @@ if plot_leg_1:
     azim_angle = np.linspace(45, 180+45, n_frames)
 
     metadata = dict(title='Leg1Ani', artist='jonamat03@gmail.com')
-    writer = FFMpegWriter(fps=24, metadata=metadata)
+    writer = FFMpegWriter(fps=fps, metadata=metadata)
     fig, ax = plt.subplots(subplot_kw=dict(projection='3d'))
 
-    with writer.saving(fig, "leg_1_animation.mp4", 220):
+    with writer.saving(fig, "leg_1_animation.mp4", dpi):
         for i in range(n_frames):
             plt.cla()
             # Earth point
@@ -116,7 +120,7 @@ if plot_leg_1:
 
         # Pause on last frame for 5 seconds
         print("Generating End-Pause")
-        for _ in range(24 * 5):  # 24 fps × 5 sec
+        for _ in range(fps * pause):  # 24 fps × 5 sec
             writer.grab_frame()
 
     print(
@@ -128,7 +132,7 @@ Plot LEG-2 Transfer
 """
 start_index = n_steps_1 - 50
 end_index = n_steps_1 + n_steps_2 + 50
-step = 2
+step = 3
 
 if plot_leg_2:
     print("--------Generating Leg 2 Animation--------")
@@ -145,10 +149,10 @@ if plot_leg_2:
     azim_angle = np.linspace(0, -120, n_frames)
 
     metadata = dict(title='Leg2Ani', artist='jonamat03@gmail.com')
-    writer = FFMpegWriter(fps=24, metadata=metadata)
+    writer = FFMpegWriter(fps=fps, metadata=metadata)
     fig, ax = plt.subplots(subplot_kw=dict(projection='3d'))
 
-    with writer.saving(fig, "leg_2_animation.mp4", 100):
+    with writer.saving(fig, "leg_2_animation.mp4", dpi):
         for i in range(n_frames):
             plt.cla()
 
@@ -191,7 +195,7 @@ if plot_leg_2:
 
         # Pause on last frame for 5 seconds
         print("Generating End-Pause")
-        for _ in range(24 * 5):  # 24 fps × 5 sec
+        for _ in range(fps * pause):  # 24 fps × 5 sec
             writer.grab_frame()
 
     print(
@@ -215,10 +219,10 @@ if plot_leg_3:
     azim_angle = np.linspace(60, 180, n_frames)
 
     metadata = dict(title='Leg3Ani', artist='jonamat03@gmail.com')
-    writer = FFMpegWriter(fps=24, metadata=metadata)
+    writer = FFMpegWriter(fps=fps, metadata=metadata)
     fig, ax = plt.subplots(subplot_kw=dict(projection='3d'))
 
-    with writer.saving(fig, "leg_3_animation.mp4", 220):
+    with writer.saving(fig, "leg_3_animation.mp4", dpi):
         for i in range(n_frames):
             plt.cla()
 
@@ -250,7 +254,7 @@ if plot_leg_3:
 
         # Pause on last frame for 5 seconds
         print("Generating End-Pause")
-        for _ in range(24 * 5):  # 24 fps × 5 sec
+        for _ in range(fps * pause):  # 24 fps × 5 sec
             writer.grab_frame()
 
     print(

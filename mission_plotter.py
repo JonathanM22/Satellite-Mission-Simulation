@@ -24,8 +24,8 @@ celestial_bodies = result['arr_1']
 # Plotting options
 plot_leg_1 = False
 plot_leg_2 = False
-plot_leg_3 = False
-sat_mission = True
+plot_leg_3 = True
+sat_mission = False
 
 """
 Plot LEG-1
@@ -236,7 +236,7 @@ if plot_leg_3:
     # ax.set_xlim([-50000, 50000])
     # ax.set_ylim([-50000, 50000])
     # ax.set_zlim([-50000, 50000])
-    ax.view_init(elev=90, azim=90, roll=0)
+    ax.view_init(elev=0, azim=0, roll=0)
     plt.show()
 
 """
@@ -246,7 +246,10 @@ Plot Sat mission
 sun = celestial_bodies[0]
 earth = celestial_bodies[1]
 mars = celestial_bodies[3]
-mission_bodies = [sun, earth, mars]
+mission_bodies = [mars]
+
+start_index = n_steps_1 + n_steps_2
+end_index = -1
 
 if sat_mission:
     ts = sat.t_ar
@@ -266,13 +269,13 @@ if sat_mission:
     ax = plt.figure().add_subplot(projection='3d')
 
     for mission_body in mission_bodies:
-        ax.plot(mission_body.r_ar[:, 0],
-                mission_body.r_ar[:, 1],
-                mission_body.r_ar[:, 2],
+        ax.plot(mission_body.r_ar[start_index:end_index, 0],
+                mission_body.r_ar[start_index:end_index, 1],
+                mission_body.r_ar[start_index:end_index, 2],
                 color=mission_body.color,
                 label=mission_body.label)
 
-    ax.plot(rs[:, 0], rs[:, 1], rs[:, 2],
+    ax.plot(rs[start_index:end_index, 0], rs[start_index:end_index, 1], rs[start_index:end_index, 2],
             color=sat.color,
             label=sat.label)
 

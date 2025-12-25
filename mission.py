@@ -139,7 +139,7 @@ celestial_bodies = [sun, earth, moon, mars, mercury,
 
 # Intialize SAT
 SAT_MASS = 100*u.kg
-sat = Spacecraft(SAT_MASS, epoch, label="S/C", color="purple")
+sat = Spacecraft(SAT_MASS, epoch, label="sat", color="purple")
 
 # Define Earth Parking Orbit
 earth_parking = Orbit(mu=EARTH_MU,
@@ -195,7 +195,7 @@ y0 = np.concatenate((sat.r0.value, sat.v0.value))
 propagation_start_timer_1 = time.perf_counter()
 dt = TimeDelta(60, format='sec')
 dt_steps = np.round(
-    (sat_orbit.period(sat_orbit.a, sat_orbit.mu).value*2)/dt.value)
+    (sat_orbit.period(sat_orbit.a, sat_orbit.mu).value)/dt.value)
 t0 = epoch - dt*dt_steps + dt
 tf = epoch
 ts = np.arange(t0, tf+dt, dt)
@@ -264,7 +264,7 @@ bodies = [earth, mars, mercury, jupiter, venus, saturn, uranus, neptune]
 
 # Intiate Solver
 propagation_start_timer_2 = time.perf_counter()
-dt = TimeDelta(86400, format='sec')
+dt = TimeDelta(86400/4, format='sec')
 t0 = sat.t_ar[-1]
 tf = t0 + tof
 ts = np.arange(t0, tf + dt, dt)
@@ -278,7 +278,11 @@ r2_lambert = get_body_barycentric(
 mars_miss = r2_lambert
 
 # Uncomment if you have already a solved value
-r2_lambert = np.array([-2.55889197e+08, -8.78471051e+06, -4.35998868e+06])
+# Idk why it changes so much when dt changes.
+# r2_lambert = np.array([-2.55889197e+08, -8.78471051e+06, -4.35998868e+06]) # DT = 84000 SEC
+r2_lambert = np.array(
+    [-2.47639804e+08, -1.35661820e+07, -1.30033987e+06])  # DT = 84000/4 SEC
+
 
 while (np.linalg.norm(mars_miss) > mars_parking.a.value):
 
@@ -330,7 +334,7 @@ while (np.linalg.norm(mars_miss) > mars_parking.a.value):
 
     if np.linalg.norm(mars_miss) > 100000:
         r2_lambert = r2_lambert - mars_miss*0.50
-    elif np.linalg.norm(mars_miss) > 15000:
+    elif np.linalg.norm(mars_miss) > 8000:
         r2_lambert = r2_lambert - mars_miss*0.25
     else:
         r2_lambert = r2_lambert - mars_miss*0.10
@@ -338,6 +342,7 @@ while (np.linalg.norm(mars_miss) > mars_parking.a.value):
     print(f"Sat is {np.linalg.norm(mars_miss)} km away from mars")
 
 print(f"r2 is: {r2_lambert}")
+print(f"Sat is {np.linalg.norm(mars_miss)} km away from mars")
 sat.r_ar = np.concatenate((sat.r_ar, sat_pos_bary))
 sat.v_ar = np.concatenate((sat.v_ar, sat_vel_bary))
 sat.t_ar = np.concatenate((sat.t_ar, ts))
@@ -370,7 +375,7 @@ bodies = []
 
 # Intiate Solver
 propagation_start_timer_3 = time.perf_counter()
-dt = TimeDelta(180, format='sec')
+dt = TimeDelta(60, format='sec')
 dt_steps = np.round(
     (sat_orbit.period(sat_orbit.a, sat_orbit.mu).value*2)/dt.value)
 t0 = sat.t_ar[-1]

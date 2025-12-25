@@ -22,9 +22,9 @@ sat = result['arr_0'][()]
 celestial_bodies = result['arr_1']
 
 # Plotting options
-plot_leg_1 = True
-plot_leg_2 = True
-plot_leg_3 = True
+plot_leg_1 = False
+plot_leg_2 = False
+plot_leg_3 = False
 
 """
 Plot LEG-1

@@ -24,7 +24,7 @@ from astropy.coordinates import get_body_barycentric
 
 # Animation driver
 # Change to reflect your file location!
-plt.rcParams['animation.ffmpeg_path'] = r"C:\Users\jonam\Desktop\Aero-Project\ISS-Payload-Mission-Simulation\ffmpeg-master-latest-win64-gpl\ffmpeg-master-latest-win64-gpl\bin\ffmpeg.exe"
+plt.rcParams['animation.ffmpeg_path'] = r"C:\Users\jonam\Desktop\Aero-Project\ffmpeg-master-latest-win64-gpl\ffmpeg-master-latest-win64-gpl\bin\ffmpeg.exe"
 
 # Plot Setting
 plot_leg_1 = False

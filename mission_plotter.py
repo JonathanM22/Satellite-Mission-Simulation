@@ -22,9 +22,10 @@ sat = result['arr_0'][()]
 celestial_bodies = result['arr_1']
 
 # Plotting options
-plot_leg_1 = True
-plot_leg_2 = True
-plot_leg_3 = True
+plot_leg_1 = False
+plot_leg_2 = False
+plot_leg_3 = False
+sat_mission = True
 
 """
 Plot LEG-1
@@ -176,7 +177,7 @@ central_body = leg_3_data["central_body"]
 sat_orbit = leg_3_data["sat_orbit"]
 bodies = leg_3_data["bodies"]
 dt = leg_3_data["dt"]
-n_steps_2 = leg_3_data["n_steps"]
+n_steps_3 = leg_3_data["n_steps"]
 t0 = leg_3_data["t0"]
 tf = leg_3_data["tf"]
 y0 = leg_3_data["y0"]
@@ -241,30 +242,35 @@ if plot_leg_3:
 """
 Plot Sat mission
 """
-sat_mission = True
+# celestial_bodies = [sun, earth, moon, mars, mercury, jupiter, venus, saturn, uranus, neptune]'
+sun = celestial_bodies[0]
+earth = celestial_bodies[1]
+mars = celestial_bodies[3]
+mission_bodies = [sun, earth, mars]
+
 if sat_mission:
     ts = sat.t_ar
     rs = sat.r_ar
     vs = sat.v_ar
     # Filling pos and vel data for all celestial bodies
     # Relative to bary center
-    for celestial_body in celestial_bodies:
-        celestial_body.r_ar = np.zeros((len(ts), 3))
-        celestial_body.v_ar = np.zeros((len(ts), 3))
+    for mission_body in mission_bodies:
+        mission_body.r_ar = np.zeros((len(ts), 3))
+        mission_body.v_ar = np.zeros((len(ts), 3))
         for i, t in enumerate(ts):
-            r, v = get_body_barycentric_posvel(celestial_body.label, t)
+            r, v = get_body_barycentric_posvel(mission_body.label, t)
 
-            celestial_body.r_ar[i] = r.xyz.to(u.km).value
-            celestial_body.v_ar[i] = v.xyz.to(u.km/u.s).value
+            mission_body.r_ar[i] = r.xyz.to(u.km).value
+            mission_body.v_ar[i] = v.xyz.to(u.km/u.s).value
 
     ax = plt.figure().add_subplot(projection='3d')
 
-    for celestial_body in celestial_bodies:
-        ax.plot(celestial_body.r_ar[:, 0],
-                celestial_body.r_ar[:, 1],
-                celestial_body.r_ar[:, 2],
-                color=celestial_body.color,
-                label=celestial_body.label)
+    for mission_body in mission_bodies:
+        ax.plot(mission_body.r_ar[:, 0],
+                mission_body.r_ar[:, 1],
+                mission_body.r_ar[:, 2],
+                color=mission_body.color,
+                label=mission_body.label)
 
     ax.plot(rs[:, 0], rs[:, 1], rs[:, 2],
             color=sat.color,

@@ -29,17 +29,20 @@ Functions
 """
 
 
+# Sets up single Runge Kutta 4 Step
 def RK4_single_step(fun, dt, t0, y0, fun_arg: list):
-
+    
+    # evaluates inputted function, fun, at t0, y0, and inputted args to create 4 constants to solve 1 rk4 step
+    # inputted function name --> y_dot_n_ephemeris
     k1 = fun(t0, y0, fun_arg)
     k2 = fun((t0 + (dt/2)), (y0 + ((dt.value/2)*k1)), fun_arg)
     k3 = fun((t0 + (dt/2)), (y0 + ((dt.value/2)*k2)), fun_arg)
     k4 = fun((t0 + dt), (y0 + (dt.value*k3)), fun_arg)
-
     y1 = y0 + (dt.value/6)*(k1 + 2*k2 + 2*k3 + k4)
     return y1
 
 
+# Two body motion ODE: creating the y_dot function for n-body with ephemeris data
 def y_dot_n_ephemeris(t, y, fun_arg: list):
     """
         t: astropy time object
@@ -51,46 +54,72 @@ def y_dot_n_ephemeris(t, y, fun_arg: list):
         r_c = distance from origin -> central body
         r_k = distance from origin -> kth body
         r_sk = distance from sat -> kth body
-        r_s = 
-
+        r_s = distance from barycenter -> sat
         m_c = central body mass
         m_k = kth body mass
+        r_ck = distance from central body -> kth body
     """
-    fun_arg[0] = central_body
-    fun_arg[1] = bodies
+    central_body = fun_arg[0]
+    bodies = fun_arg[1]
 
-    r = y[0:3]
+    # r = distance from central body -> sat
+    r = y[0:3]  
     r_mag = np.linalg.norm(r)
     v = y[3:6]
 
+    # r_c = distance from origin -> central body
     r_c = get_body_barycentric(central_body.label, t).xyz.to(u.km).value
     m_c = central_body.mass.value
 
-    a = ((G.value*m_c)/(r_mag**3)) * -r
-
+    central_body.mu = G.value * m_c
+    # acceleration on satellite due to central body
+    a = ((central_body.mu)/(r_mag**3)) * -r
     # print(f'Accel from CB: {a}')
 
     for body in bodies:
+
+        #  # r_s = r_c + r
+        # r_sk = r_k - r_s
+        # r_k = distance from origin -> kth body
+
         r_k = get_body_barycentric(body.label, t).xyz.to(u.km).value
         m_k = body.mass.value
 
-        # r_s = r_c + r
-        # r_sk = r_k - r_s
+        # r_s = distance from barycenter -> sat 
+        # r_sk = distance from sat -> kth body
+        # r_ck = distance from central body -> kth body
 
         r_ck = r_k - r_c
         r_sk = r_ck - r
-
         r_sk_mag = np.linalg.norm(r_sk)
 
-        a_k = (((G.value*m_k)/(r_sk_mag**3)) * r_sk)
+        body.mu = G.value * m_k
+        # acceleration on satellite due to kth bodies
+        a_k = ((body.mu)/(r_sk_mag**3)) * r_sk
         # print(f'Accel from {body.label}: {a_k}')
 
+        # total acceleration on satellite due to all bodies
         a = a + a_k
 
     y_dot = np.concatenate((v, a))
 
     return y_dot
 
+def propagate_rk4(r0, v0, t0, tf, dt, fun_arg: list):
+    # time array equally by dt
+    ts = np.arange(t0, tf, dt)
+    n_steps = len(ts)
+    ys = np.zeros((n_steps, 6))
+    y0 = np.concatenate((r0, v0))
+    ys[0] = y0
+    step = 1
+    for i in range(n_steps - 1):
+        ys[i+1] = RK4_single_step(y_dot_n_ephemeris, dt, ts[i], ys[i], fun_arg=fun_arg)
+        step += 1
+    r = ys[:, :3]
+    v = ys[:, 3:6]
+
+    return r, v, ys
 
 """
 Constants and Intialization
@@ -205,11 +234,7 @@ ys[0] = y0
 ts[0] = t0
 fun_arg = [central_body, bodies]
 
-step = 1
-for i in range(len(ts) - 1):
-    ys[step] = RK4_single_step(
-        y_dot_n_ephemeris, dt, ts[step-1], ys[step-1], fun_arg=fun_arg)
-    step += 1
+r, v, ys = propagate_rk4(sat.r0.value, sat.v0.value, t0, tf, dt, fun_arg)
 propagation_time_1 = time.perf_counter() - propagation_start_timer_1
 
 # Generating position of SAT in terms of barycenter
@@ -310,6 +335,9 @@ while (np.linalg.norm(mars_miss) > mars_parking.a.value):
         ys[step] = RK4_single_step(
             y_dot_n_ephemeris, dt, ts[step-1], ys[step-1], fun_arg=fun_arg)
         step += 1
+
+    # r, v, ys = propagate_rk4(sat.r0.value, sat.v0.value, t0, tf, dt, fun_arg)
+    # for some reason, this doesn't work and error on line 356 saying something about index 720
     propagation_time_2 = time.perf_counter() - propagation_start_timer_2
 
     # Generating position of sat in terms of barycenter
@@ -420,6 +448,7 @@ for i in range(len(ts) - 1):
     ys[step] = RK4_single_step(
         y_dot_n_ephemeris, dt, ts[step-1], ys[step-1], fun_arg=fun_arg)
     step += 1
+    # r, v, ys = propagate_rk4(sat.r0.value, sat.v0.value, t0, tf, dt, fun_arg)
 propagation_time_3 = time.perf_counter() - propagation_start_timer_3
 
 # Generating position of sat in terms of barycenter

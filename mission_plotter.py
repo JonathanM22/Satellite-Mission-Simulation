@@ -23,9 +23,9 @@ celestial_bodies = result['arr_1']
 
 # Plotting options
 plot_leg_1 = False
-plot_leg_2 = False
+plot_leg_2 = True
 plot_leg_3 = True
-sat_mission = False
+sat_mission = True
 
 """
 Plot LEG-1
@@ -248,7 +248,7 @@ earth = celestial_bodies[1]
 mars = celestial_bodies[3]
 mission_bodies = [mars]
 
-start_index = n_steps_1 + n_steps_2
+start_index = 0
 end_index = -1
 
 if sat_mission:

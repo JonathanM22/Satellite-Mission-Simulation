@@ -31,7 +31,7 @@ Functions
 
 # Sets up single Runge Kutta 4 Step
 def RK4_single_step(fun, dt, t0, y0, fun_arg: list):
-    
+
     # evaluates inputted function, fun, at t0, y0, and inputted args to create 4 constants to solve 1 rk4 step
     # inputted function name --> y_dot_n_ephemeris
     k1 = fun(t0, y0, fun_arg)
@@ -63,7 +63,7 @@ def y_dot_n_ephemeris(t, y, fun_arg: list):
     bodies = fun_arg[1]
 
     # r = distance from central body -> sat
-    r = y[0:3]  
+    r = y[0:3]
     r_mag = np.linalg.norm(r)
     v = y[3:6]
 
@@ -85,7 +85,7 @@ def y_dot_n_ephemeris(t, y, fun_arg: list):
         r_k = get_body_barycentric(body.label, t).xyz.to(u.km).value
         m_k = body.mass.value
 
-        # r_s = distance from barycenter -> sat 
+        # r_s = distance from barycenter -> sat
         # r_sk = distance from sat -> kth body
         # r_ck = distance from central body -> kth body
 
@@ -98,12 +98,16 @@ def y_dot_n_ephemeris(t, y, fun_arg: list):
         a_k = ((body.mu)/(r_sk_mag**3)) * r_sk
         # print(f'Accel from {body.label}: {a_k}')
 
+        # acceleration on CB due to kth body
+        a_cb_k = ((body.mu)/(np.linalg.norm(r_ck)**3)) * r_ck
+
         # total acceleration on satellite due to all bodies
-        a = a + a_k
+        a = a + a_k - a_cb_k
 
     y_dot = np.concatenate((v, a))
 
     return y_dot
+
 
 def propagate_rk4(r0, v0, t0, tf, dt, fun_arg: list):
     # time array equally by dt
@@ -114,12 +118,14 @@ def propagate_rk4(r0, v0, t0, tf, dt, fun_arg: list):
     ys[0] = y0
     step = 1
     for i in range(n_steps - 1):
-        ys[i+1] = RK4_single_step(y_dot_n_ephemeris, dt, ts[i], ys[i], fun_arg=fun_arg)
+        ys[i+1] = RK4_single_step(y_dot_n_ephemeris,
+                                  dt, ts[i], ys[i], fun_arg=fun_arg)
         step += 1
     r = ys[:, :3]
     v = ys[:, 3:6]
 
     return r, v, ys
+
 
 """
 Constants and Intialization
@@ -305,8 +311,9 @@ mars_miss = r2_lambert
 # Uncomment if you have already a solved value
 # Idk why it changes so much when dt changes.
 # r2_lambert = np.array([-2.55889197e+08, -8.78471051e+06, -4.35998868e+06]) # DT = 84000 SEC
-r2_lambert = np.array(
-    [-2.47639804e+08, -1.35661820e+07, -1.30033987e+06])  # DT = 84000/4 SEC
+# r2_lambert = np.array([-2.47639804e+08, -1.35661820e+07, -1.30033987e+06])  # DT = 84000/4 SEC
+r2_lambert = [-2.47641275e+08, -1.35238790e+07, -
+              1.28422513e+06]  # WITH ADDED a_cb_k term in y_dot
 
 
 while (np.linalg.norm(mars_miss) > mars_parking.a.value):

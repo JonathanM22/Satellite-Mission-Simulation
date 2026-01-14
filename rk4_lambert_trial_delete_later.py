@@ -18,6 +18,7 @@ from Universal_Variable import *
 from poliastro.iod import izzo
 from poliastro.bodies import Sun
 from poliastro.iod import vallado
+from body import *
 
 # Constants
 # ALL constants are in SI UNITS! (meters, seconds, etc.)
@@ -25,7 +26,6 @@ from poliastro.iod import vallado
 
 EARTH_RAD = 6.371 * 10**6
 AU = 1.496 * 10**11
-SUN_MU = 1.327 * 10**20
 k = Sun.k
 
 def RK4_single_step(fun, dt, t0, y0, fun_arg: list):
@@ -91,52 +91,55 @@ transfer_long = Orbit(mu=SUN_MU)
 """
 Using JPL data to get postion and velocity of earth and mars @ Depature
 """
-solar_system_ephemeris.set('de432s')  # Ephemeris from 1950 - 2050
-depature_date = Time("2026-11-08")
+solar_system_ephemeris.set('de432s')  # Ephemeris from 19a50 - 2050
+departure_date = Time("2026-11-08")
 tof = TimeDelta(100, format='jd')
-arrival_date = depature_date + tof
+arrival_date = departure_date + tof
 print(f'{arrival_date}\n')
 
 # position vector of earth and mars (initial and final satellite positions) wrt to soloar system barycenter
-r1_earth_eci, v1_earth_eci = get_body_barycentric_posvel('earth', depature_date)
-r1_mars_eci, v1_mars_eci = get_body_barycentric_posvel('mars', depature_date)
+r1_earth_eci, v1_earth_eci = get_body_barycentric_posvel('earth', departure_date)
+r1_mars_eci, v1_mars_eci = get_body_barycentric_posvel('mars', departure_date)
 
 """
 Need to get sun position and velocity to transform
 earth and mars baycentric cords to helio-centric
 """
 # Position of Sun
-r_sun1, v_sun1 = get_body_barycentric_posvel('sun', depature_date)
-r_sun2, v_sun2 = get_body_barycentric_posvel('sun', depature_date+tof)
+r_sun1, v_sun1 = get_body_barycentric_posvel('sun', departure_date)
+r_sun2, v_sun2 = get_body_barycentric_posvel('sun', departure_date+tof)
 
 # Position & Velocity of earth respect to sun @ Depature
-r1_earth = (r1_earth_eci.xyz - r_sun1.xyz).to(u.m).value  # type:ignore
-v1_earth = (v1_earth_eci.xyz - v_sun1.xyz).to(u.m/u.s).value  # type:ignore
+r1_earth = (r1_earth_eci.xyz - r_sun1.xyz).to(u.km).value  # type:ignore
+v1_earth = (v1_earth_eci.xyz - v_sun1.xyz).to(u.km/u.s).value  # type:ignore
 
 # Position & Velocity of mars respect to sun @ Depature
-r1_mars = (r1_mars_eci.xyz - r_sun1.xyz).to(u.m).value  # type:ignore
-v1_mars = (v1_mars_eci.xyz - v_sun1.xyz).to(u.m/u.s).value  # type:ignore
+r1_mars = (r1_mars_eci.xyz - r_sun1.xyz).to(u.km).value  # type:ignore
+v1_mars = (v1_mars_eci.xyz - v_sun1.xyz).to(u.km/u.s).value  # type:ignore
 
 # Propogate orbits of Earth and Mars during TOF
 earth_rs, earth_vs = propagate_rk4(r1_earth, v1_earth, earth.mu, tspan=(tof.sec), dt=dt)
 mars_rs, mars_vs = propagate_rk4(r1_mars, v1_mars, mars.mu, tspan=(tof.sec), dt=dt)
 
 # Final Position and velocity of Mars
-r2_mars_eci, v2_mars_eci = get_body_barycentric_posvel('mars', depature_date+tof)
-r2_mars = (r2_mars_eci.xyz - r_sun2.xyz).to(u.m).value  # type:ignore
-v2_mars = (v2_mars_eci.xyz - v_sun2.xyz).to(u.m/u.s).value  # type:ignore
+r2_mars_eci, v2_mars_eci = get_body_barycentric_posvel('mars', departure_date+tof)
+r2_mars = (r2_mars_eci.xyz - r_sun2.xyz).to(u.km).value  # type:ignore
+v2_mars = (v2_mars_eci.xyz - v_sun2.xyz).to(u.km/u.s).value  # type:ignore
+
+print(f'Earth Position at Depature: {r1_earth} km')
+print(f'Mars Position at Arrival: {r2_mars} km\n')
 
 """
 Solving for lamberts.  
 """
 
 print("VALLADO FUNCTION")
-(v1_short, v2_short), = vallado.lambert( k, r1_earth*u.m, r2_mars*u.m, (tof.sec*u.s), short=True)
+(v1_short, v2_short), = vallado.lambert( k, r1_earth*u.km, r2_mars*u.km, (tof.sec*u.s), short=True)
 print("Short Orbit Transfer")
 print(f"Departure velocity: {v1_short}")
 print(f"Arrival velocity: {v2_short}\n")
 
-# (v1_long, v2_long),= vallado.lambert(k, r1_earth*u.m, r2_mars*u.m , (tof.sec*u.s),short=False,numiter=100)
+# (v1_long, v2_long),= vallado.lambert(k, r1_earth*u.km, r2_mars*u.km , (tof.sec*u.s),short=False,numiter=100)
 # print("Long Orbit Transfer")
 # print(f"Departure velocity: {v1_long}")
 # print(f"Arrival velocity: {v2_long}\n")
@@ -160,19 +163,19 @@ print("VRAJ FUNCTION")
 print("Short Orbit Transfer")
 transfer_short.a, transfer_short.p, transfer_short.e, transfer_short_v1, transfer_short_v2 = universal_lambert(
     r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='short')
-print(  f'Short Transfer semi major axis is {transfer_short.a/1000} km -->  {(transfer_short.a/1000/149597870.7)} AU ')
+print(  f'Short Transfer semi major axis is {transfer_short.a} km -->  {(transfer_short.a/149597870.7)} AU ')
 print(f'Short Transfer Eccentricity is: {transfer_short.e}')
-print(f'Departure velocity: {transfer_short_v1/1000} km/s')
-print(f'Arrival velocity: {transfer_short_v2/1000} km/s\n')
+print(f'Departure velocity: {transfer_short_v1} km/s')
+print(f'Arrival velocity: {transfer_short_v2} km/s\n')
 
 
 print("Long Orbit Transfer")
 transfer_long.a, transfer_long.p, transfer_long.e, transfer_long_v1, transfer_long_v2 = universal_lambert(
     r1_earth, r2_mars, (tof.sec), transfer_long.mu, desired_path='long')
-print(f'Long Transfer semi major axis is {transfer_long.a/1000} km --> {(transfer_long.a/1000/149597870.7)} AU')
+print(f'Long Transfer semi major axis is {transfer_long.a} km --> {(transfer_long.a/149597870.7)} AU')
 print(f'Long Transfer Eccentricity is: {transfer_long.e}')
-print(f'Departure velocity: {transfer_long_v1/1000} km/s')
-print(f'Arrival velocity: {transfer_long_v2/1000} km/s')
+print(f'Departure velocity: {transfer_long_v1} km/s')
+print(f'Arrival velocity: {transfer_long_v2} km/s')
 
 
 """
@@ -233,7 +236,7 @@ if plot == True:
 
     # formatting
     ax.set_title(
-        f"Earth–Mars Transfer Orbits {depature_date.strftime('%Y-%m-%d')} - {arrival_date.strftime('%Y-%m-%d')}", fontsize=14, pad=10)
+        f"Earth–Mars Transfer Orbits {departure_date.strftime('%Y-%m-%d')} - {arrival_date.strftime('%Y-%m-%d')}", fontsize=14, pad=10)
     ax.set_aspect('equal')
     plt.tight_layout()
     ax.set_xlabel("X [m]")

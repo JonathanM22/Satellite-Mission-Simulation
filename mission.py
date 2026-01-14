@@ -329,14 +329,14 @@ r2_lambert = get_body_barycentric( mars.label, arrival_date).xyz.to(u.km).value 
 
 
 # COMMENTING FOR TRIAL 
-# mars_miss = r2_lambert
+mars_miss = r2_lambert
 
-# # Uncomment if you have already a solved value
-# # Idk why it changes so much when dt changes.
-# # r2_lambert = np.array([-2.55889197e+08, -8.78471051e+06, -4.35998868e+06]) # DT = 84000 SEC
-# # r2_lambert = np.array([-2.47639804e+08, -1.35661820e+07, -1.30033987e+06])  # DT = 84000/4 SEC
-# r2_lambert = [-2.47641275e+08, -1.35238790e+07, -
-#               1.28422513e+06]  # WITH ADDED a_cb_k term in y_dot
+# Uncomment if you have already a solved value
+# Idk why it changes so much when dt changes.
+# r2_lambert = np.array([-2.55889197e+08, -8.78471051e+06, -4.35998868e+06]) # DT = 84000 SEC
+# r2_lambert = np.array([-2.47639804e+08, -1.35661820e+07, -1.30033987e+06])  # DT = 84000/4 SEC
+r2_lambert = [-2.47641275e+08, -1.35238790e+07, -
+              1.28422513e+06]  # WITH ADDED a_cb_k term in y_dot
 
 
 while (np.linalg.norm(mars_miss) > mars_parking.a.value):

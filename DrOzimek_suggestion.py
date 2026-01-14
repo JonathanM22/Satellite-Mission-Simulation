@@ -176,7 +176,8 @@ celestial_bodies = [sun, earth, moon, mars, mercury, jupiter, venus, saturn, ura
 
 # Intialize SAT
 SAT_MASS = 100*u.kg
-sat = Spacecraft(SAT_MASS, epoch, label="sat", color="purple")
+departure_date = Time("2026-11-08")
+sat = Spacecraft(SAT_MASS, departure_date, label="sat", color="purple")
 
 '''
 STEP 1
@@ -192,14 +193,14 @@ transfer_long = Orbit(mu=SUN_MU)
 """
 Using JPL data to get postion and velocity of earth (satellite) at departure and mars (target) at arrival)
 """
-
+solar_system_ephemeris.set('de432s')
 tof = TimeDelta(100, format='jd')
-arrival_date = epoch + tof
+arrival_date = departure_date + tof
 print(f'{arrival_date}\n')
 
 # position vector of earth and mars (initial and final satellite positions) wrt to soloar system barycenter
-r1_earth_eci, v1_earth_eci = get_body_barycentric_posvel( 'earth', epoch)
-r2_mars_eci, v2_mars_eci = get_body_barycentric_posvel('mars', epoch+tof)
+r1_earth_eci, v1_earth_eci = get_body_barycentric_posvel( 'earth', departure_date)
+r2_mars_eci, v2_mars_eci = get_body_barycentric_posvel('mars', departure_date+tof)
 
 """
 Need to get sun position and velocity to transform
@@ -207,8 +208,8 @@ earth and mars baycentric cords to helio-centric: sun centered inertial frame
 """
 
 # Position of Sun at departure and arrival
-r_sun1, v_sun1 = get_body_barycentric_posvel('sun', epoch)
-r_sun2, v_sun2 = get_body_barycentric_posvel('sun', epoch+tof)
+r_sun1, v_sun1 = get_body_barycentric_posvel('sun', departure_date)
+r_sun2, v_sun2 = get_body_barycentric_posvel('sun', departure_date+tof)
 
 """
 heliocentric position and velocity vectors 

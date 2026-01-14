@@ -22,78 +22,11 @@ from poliastro.iod import vallado
 # Constants
 # ALL constants are in SI UNITS! (meters, seconds, etc.)
 # Also for formattng constants are ALL_CAPS
+
 EARTH_RAD = 6.371 * 10**6
 AU = 1.496 * 10**11
 SUN_MU = 1.327 * 10**20
 k = Sun.k
-
-
-# Use Table 1 https://ssd.jpl.nasa.gov/planets/approx_pos.html
-earth = Orbit(a=1.00000261*AU,
-              e=0.01671123,
-              inc=-0.00001531,
-              raan=0,
-              aop=102.93768193,
-              mu=SUN_MU)
-
-mars = Orbit(a=1.52371034*AU,
-             e=0.09339410,
-             inc=1.84969142,
-             raan=49.55953891,
-             aop=-23.94362959,
-             mu=SUN_MU)
-
-
-venus = Orbit(a=0.72333566*AU,
-              e=0.00677672,
-              inc=3.39467605,
-              raan=76.67984255,
-              aop=131.60246718,
-              mu=SUN_MU)
-
-
-transfer_short = Orbit(mu=SUN_MU)
-transfer_long = Orbit(mu=SUN_MU)
-
-
-"""
-Using JPL data to get postion and velocity of earth and mars @ Depature
-"""
-solar_system_ephemeris.set('de432s')  # Ephemeris from 1950 - 2050
-depature_date = Time("2026-11-08")
-tof = TimeDelta(100, format='jd')
-arrival_date = depature_date + tof
-print(f'{arrival_date}\n')
-
-# ECI since all motion are heliocentric and the barycentric frame is centered at the sun - moves at constant velocity
-r1_earth_eci, v1_earth_eci = get_body_barycentric_posvel(
-    'earth', depature_date)
-r1_mars_eci, v1_mars_eci = get_body_barycentric_posvel('mars', depature_date)
-r1_venus_eci, v1_venus_eci = get_body_barycentric_posvel(
-    'venus', depature_date)
-
-
-"""
-Need to get sun position and velocity to transform
-earth and mars baycentric cords to helio-centric
-"""
-# Position of Sun
-r_sun1, v_sun1 = get_body_barycentric_posvel('sun', depature_date)
-
-# Position & Velocity of earth respect to sun @ Depature
-r1_earth = (r1_earth_eci.xyz - r_sun1.xyz).to(u.m).value  # type:ignore
-v1_earth = (v1_earth_eci.xyz - v_sun1.xyz).to(u.m/u.s).value  # type:ignore
-
-# Position & Velocity of mars respect to sun @ Depature
-r1_mars = (r1_mars_eci.xyz - r_sun1.xyz).to(u.m).value  # type:ignore
-v1_mars = (v1_mars_eci.xyz - v_sun1.xyz).to(u.m/u.s).value  # type:ignore
-
-# Position & Velocity of venus respect to sun @ Depature
-r1_venus = (r1_venus_eci.xyz - r_sun1.xyz).to(u.m).value  # type:ignore
-v1_venus = (v1_venus_eci.xyz - v_sun1.xyz).to(u.m/u.s).value  # type:ignore
-
-# Propogate using RK4
-
 
 def RK4_single_step(fun, dt, t0, y0, fun_arg: list):
     k1 = fun(t0, y0, fun_arg)
@@ -137,26 +70,68 @@ def propagate_rk4(r0, v0, mu, tspan, dt):
 
     return (rs, vs)
 
+# Use Table 1 https://ssd.jpl.nasa.gov/planets/approx_pos.html
+earth = Orbit(a=1.00000261*AU,
+              e=0.01671123,
+              inc=-0.00001531,
+              raan=0,
+              aop=102.93768193,
+              mu=SUN_MU)
+
+mars = Orbit(a=1.52371034*AU,
+             e=0.09339410,
+             inc=1.84969142,
+             raan=49.55953891,
+             aop=-23.94362959,
+             mu=SUN_MU)
+
+transfer_short = Orbit(mu=SUN_MU)
+transfer_long = Orbit(mu=SUN_MU)
+
+"""
+Using JPL data to get postion and velocity of earth and mars @ Depature
+"""
+solar_system_ephemeris.set('de432s')  # Ephemeris from 1950 - 2050
+depature_date = Time("2026-11-08")
+tof = TimeDelta(100, format='jd')
+arrival_date = depature_date + tof
+print(f'{arrival_date}\n')
+
+# position vector of earth and mars (initial and final satellite positions) wrt to soloar system barycenter
+r1_earth_eci, v1_earth_eci = get_body_barycentric_posvel('earth', depature_date)
+r1_mars_eci, v1_mars_eci = get_body_barycentric_posvel('mars', depature_date)
+
+"""
+Need to get sun position and velocity to transform
+earth and mars baycentric cords to helio-centric
+"""
+# Position of Sun
+r_sun1, v_sun1 = get_body_barycentric_posvel('sun', depature_date)
+r_sun2, v_sun2 = get_body_barycentric_posvel('sun', depature_date+tof)
+
+# Position & Velocity of earth respect to sun @ Depature
+r1_earth = (r1_earth_eci.xyz - r_sun1.xyz).to(u.m).value  # type:ignore
+v1_earth = (v1_earth_eci.xyz - v_sun1.xyz).to(u.m/u.s).value  # type:ignore
+
+# Position & Velocity of mars respect to sun @ Depature
+r1_mars = (r1_mars_eci.xyz - r_sun1.xyz).to(u.m).value  # type:ignore
+v1_mars = (v1_mars_eci.xyz - v_sun1.xyz).to(u.m/u.s).value  # type:ignore
 
 # Propogate orbits of Earth and Mars during TOF
-earth_rs, earth_vs = propagate_rk4(
-    r1_earth, v1_earth, earth.mu, tspan=(tof.sec), dt=dt)
-mars_rs, mars_vs = propagate_rk4(
-    r1_mars, v1_mars, mars.mu, tspan=(tof.sec), dt=dt)
+earth_rs, earth_vs = propagate_rk4(r1_earth, v1_earth, earth.mu, tspan=(tof.sec), dt=dt)
+mars_rs, mars_vs = propagate_rk4(r1_mars, v1_mars, mars.mu, tspan=(tof.sec), dt=dt)
 
 # Final Position and velocity of Mars
-r2_mars = mars_rs[-1]
-v2_mars = mars_vs[-1]
+r2_mars_eci, v2_mars_eci = get_body_barycentric_posvel('mars', depature_date+tof)
+r2_mars = (r2_mars_eci.xyz - r_sun2.xyz).to(u.m).value  # type:ignore
+v2_mars = (v2_mars_eci.xyz - v_sun2.xyz).to(u.m/u.s).value  # type:ignore
 
 """
 Solving for lamberts.  
 """
 
-# (v1_short, v2_short),= izzo.lambert(k, r1_earth*u.m, r2_mars*u.m , (tof.sec*u.s))
-
 print("VALLADO FUNCTION")
-(v1_short, v2_short), = vallado.lambert(
-    k, r1_earth*u.m, r2_mars*u.m, (tof.sec*u.s), short=True)
+(v1_short, v2_short), = vallado.lambert( k, r1_earth*u.m, r2_mars*u.m, (tof.sec*u.s), short=True)
 print("Short Orbit Transfer")
 print(f"Departure velocity: {v1_short}")
 print(f"Arrival velocity: {v2_short}\n")
@@ -185,8 +160,7 @@ print("VRAJ FUNCTION")
 print("Short Orbit Transfer")
 transfer_short.a, transfer_short.p, transfer_short.e, transfer_short_v1, transfer_short_v2 = universal_lambert(
     r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='short')
-print(
-    f'Short Transfer semi major axis is {transfer_short.a/1000} km -->  {(transfer_short.a/1000/149597870.7)} AU ')
+print(  f'Short Transfer semi major axis is {transfer_short.a/1000} km -->  {(transfer_short.a/1000/149597870.7)} AU ')
 print(f'Short Transfer Eccentricity is: {transfer_short.e}')
 print(f'Departure velocity: {transfer_short_v1/1000} km/s')
 print(f'Arrival velocity: {transfer_short_v2/1000} km/s\n')
@@ -195,8 +169,7 @@ print(f'Arrival velocity: {transfer_short_v2/1000} km/s\n')
 print("Long Orbit Transfer")
 transfer_long.a, transfer_long.p, transfer_long.e, transfer_long_v1, transfer_long_v2 = universal_lambert(
     r1_earth, r2_mars, (tof.sec), transfer_long.mu, desired_path='long')
-print(
-    f'Long Transfer semi major axis is {transfer_long.a/1000} km --> {(transfer_long.a/1000/149597870.7)} AU')
+print(f'Long Transfer semi major axis is {transfer_long.a/1000} km --> {(transfer_long.a/1000/149597870.7)} AU')
 print(f'Long Transfer Eccentricity is: {transfer_long.e}')
 print(f'Departure velocity: {transfer_long_v1/1000} km/s')
 print(f'Arrival velocity: {transfer_long_v2/1000} km/s')
@@ -206,10 +179,8 @@ print(f'Arrival velocity: {transfer_long_v2/1000} km/s')
 Propogate transfer orbits
 """
 transfer_r1 = r1_earth
-transfer_short_rs, transfer_short_vs = propagate_rk4(
-    transfer_r1, transfer_short_v1, transfer_short.mu, tspan=tof.sec, dt=dt)
-transfer_long_rs, transfer_long_vs = propagate_rk4(
-    transfer_r1, transfer_long_v1, transfer_long.mu, tspan=tof.sec, dt=dt)
+transfer_short_rs, transfer_short_vs = propagate_rk4( transfer_r1, transfer_short_v1, transfer_short.mu, tspan=tof.sec, dt=dt)
+transfer_long_rs, transfer_long_vs = propagate_rk4(transfer_r1, transfer_long_v1, transfer_long.mu, tspan=tof.sec, dt=dt)
 
 """
 Calcs
@@ -223,10 +194,8 @@ dv2_long = v2_mars - transfer_long_v2
 dv_long = np.linalg.norm(dv1_long) + np.linalg.norm(dv2_long)
 
 # Full Propogated Orbits: 1 Period
-earth_full_rs, earth_full_vs = propagate_rk4(
-    r1_earth, v1_earth, earth.mu, tspan=(earth.period(earth.a, earth.mu)), dt=dt)
-mars_full_rs, mars_full_vs = propagate_rk4(
-    r1_mars, v1_mars, mars.mu, tspan=(mars.period(mars.a, mars.mu)), dt=dt)
+earth_full_rs, earth_full_vs = propagate_rk4( r1_earth, v1_earth, earth.mu, tspan=(earth.period(earth.a, earth.mu)), dt=dt)
+mars_full_rs, mars_full_vs = propagate_rk4(r1_mars, v1_mars, mars.mu, tspan=(mars.period(mars.a, mars.mu)), dt=dt)
 plot = True
 if plot == True:
     """- - - - - - - - - - - - - - - -PLOTTING- - - - - - - - - - - - - - - -"""

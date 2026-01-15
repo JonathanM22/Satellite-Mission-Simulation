@@ -161,7 +161,7 @@ def y_dot_n_ephemeris(t, y, fun_arg: list):
         # a = a + a_k - a_cb_k
         a = a + a_k 
 
-    y_dot = np.concatenate((v, a))
+        y_dot = np.concatenate((v, a))
 
     return y_dot
 
@@ -194,64 +194,116 @@ transfer_long = Orbit(mu=SUN_MU)
 Using JPL data to get postion and velocity of earth (satellite) at departure and mars (target) at arrival)
 """
 solar_system_ephemeris.set('de432s')
-tof = TimeDelta(100, format='jd')
-arrival_date = departure_date + tof
-print(f'{arrival_date}\n')
 
-# position vector of earth and mars (initial and final satellite positions) wrt to soloar system barycenter
-r1_earth_eci, v1_earth_eci = get_body_barycentric_posvel( 'earth', departure_date)
-r2_mars_eci, v2_mars_eci = get_body_barycentric_posvel('mars', departure_date+tof)
+tof_range = list(range(100, 400, 10))
+
+results = []
+
+for tof_days in tof_range:
+    tof = TimeDelta(tof_days, format='jd')
+    arrival_date = departure_date + tof
+    print(f'{arrival_date}\n')
+
+    # position vector of earth and mars (initial and final satellite positions) wrt to soloar system barycenter
+    r1_earth_eci, v1_earth_eci = get_body_barycentric_posvel( 'earth', departure_date)
+    r2_mars_eci, v2_mars_eci = get_body_barycentric_posvel('mars', departure_date+tof)
+
+    """
+    Need to get sun position and velocity to transform
+    earth and mars baycentric cords to helio-centric: sun centered inertial frame
+    """
+
+    # Position of Sun at departure and arrival
+    r_sun1, v_sun1 = get_body_barycentric_posvel('sun', departure_date)
+    r_sun2, v_sun2 = get_body_barycentric_posvel('sun', departure_date+tof)
+
+    """
+    heliocentric position and velocity vectors 
+    """
+
+    # Position & Velocity of earth (satellite) wrt respect to sun @ Depature
+    r1_earth = (r1_earth_eci.xyz - r_sun1.xyz).to(u.km).value  # type:ignore
+    v1_earth = (v1_earth_eci.xyz - v_sun1.xyz).to(u.km/u.s).value  # type:ignore
+
+    # Position & Velocity of mars (satellite) wrtrespect to sun @ Depature
+    r2_mars = (r2_mars_eci.xyz - r_sun2.xyz).to(u.km).value  # type:ignore
+    v2_mars = (v2_mars_eci.xyz - v_sun2.xyz).to(u.km/u.s).value
+
+    # cant get much frmo this since its restricted to 0 - pi
+    transfer_angle = (np.acos(np.dot(r1_earth, r2_mars) / (np.linalg.norm(r1_earth) * np.linalg.norm(r2_mars))))
+    h = np.cross(r1_earth, r2_mars)
+    if h[2] < 0:
+        transfer_angle = 2 * np.pi - transfer_angle
+        
+    # print(f'Transfer angle: {np.degrees(transfer_angle):.1f}°')
+
+    # goes back to what poliastro was talking about: prograde and retrograde
+
+    print(f'-----------------------------------------------------------------------For TOF of {tof_days} days:-----------------------------------------------------------------------n')
+    print(f'Earth Position at Depature: {r1_earth} km')
+    print(f'Mars Position at Arrival: {r2_mars} km\n')
+
+    bodies =  [earth, venus, mercury, mars, jupiter, saturn, uranus, neptune]  
+    central_body = sun
+    fun_arg = [central_body, bodies]
+
+    # print("VALLADO FUNCTION")
+    # (v1_short, v2_short), = vallado.lambert(k, r1_earth*u.km, r2_mars*u.km, (tof.sec*u.s), short=True)
+    # print(f"Departure velocity: {v1_short} | Arrival velocity: {v2_short}\n")
+
+    # print("VRAJ FUNCTION") -> Universal Lambert Formulation
+    transfer_short.a, transfer_short.p, transfer_short.e, transfer_v1_short, transfer_v2_short = universal_lambert( r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path= 'short')
+    # print(f'Short Transfer semi major axis is {transfer_short.a} km -->  {(transfer_short.a/149597870.7)} AU | Eccentricity = {transfer_short.e} | Departure velocity: {transfer_v1} km/s | Arrival velocity: {transfer_v2} km/s\n')
+    C3_short = np.linalg.norm(transfer_v1_short - v1_earth)**2  
+    transfer_long.a, transfer_long.p, transfer_long.e, transfer_v1_long, transfer_v2_long = universal_lambert( r1_earth, r2_mars, (tof.sec), transfer_long.mu, desired_path= 'long')
+    # print(f'Long Transfer semi major axis is {transfer_long.a} km -->  {(transfer_long.a/149597870.7)} AU | Eccentricity = {transfer_long.e} | Departure velocity: {transfer_v1} km/s | Arrival velocity: {transfer_v2} km/s\n')
+    C3_long = np.linalg.norm(transfer_v1_long - v1_earth)**2
+
+    if C3_short < C3_long:
+        C3 = C3_short   
+        transfer_v1 = transfer_v1_short
+        transfer_v2 = transfer_v2_short
+    else:
+        C3 = C3_long
+        transfer_v1 = transfer_v1_long
+        transfer_v2 = transfer_v2_long
+
+    Vinf_arrival = np.linalg.norm(transfer_v2 - v2_mars)
+
+    results.append({
+            'tof_days': tof_days,
+            'C3': C3,
+            'V1': transfer_v1,
+            'V2': transfer_v2,
+            'V_earth': v1_earth,
+            'V_mars': v2_mars,
+            'V_inf_dep': np.sqrt(C3),
+            'Vinf_arrival': Vinf_arrival,
+            'r1': r1_earth,
+            'r2': r2_mars,
+            'arrival_date': arrival_date,
+            'transfer_angle': np.degrees(transfer_angle)
+        })
+
 
 """
-Need to get sun position and velocity to transform
-earth and mars baycentric cords to helio-centric: sun centered inertial frame
+# Display results in a table
 """
+# Syntax was taken from Claude im not gonna lie LOL
 
-# Position of Sun at departure and arrival
-r_sun1, v_sun1 = get_body_barycentric_posvel('sun', departure_date)
-r_sun2, v_sun2 = get_body_barycentric_posvel('sun', departure_date+tof)
+# Spike in the p
 
-"""
-heliocentric position and velocity vectors 
-"""
+print("\n" + "="*140)
+print(f"{'TOF (days)':<12} {'C3 (km²/s²)':<15} {'V∞ Dep (km/s)':<16} {'V∞ Arr (km/s)':<16} {'Transfer Angle (°)':<20} {'Arrival Date':<20}")
+print("="*140)
 
-# Position & Velocity of earth (satellite) wrt respect to sun @ Depature
-r1_earth = (r1_earth_eci.xyz - r_sun1.xyz).to(u.km).value  # type:ignore
-v1_earth = (v1_earth_eci.xyz - v_sun1.xyz).to(u.km/u.s).value  # type:ignore
+for res in results:
+    print(f"{res['tof_days']:<12} {res['C3']:<15.2f} {res['V_inf_dep']:<16.3f} "
+          f"{res['Vinf_arrival']:<16.3f} {res['transfer_angle']:<20.5f} {res['arrival_date'].iso[:10]:<20}")
 
-# Position & Velocity of mars (satellite) wrtrespect to sun @ Depature
-r2_mars = (r2_mars_eci.xyz - r_sun2.xyz).to(u.km).value  # type:ignore
-v2_mars = (v2_mars_eci.xyz - v_sun2.xyz).to(u.km/u.s).value
-
-print(f'Earth Position at Depature: {r1_earth} km')
-print(f'Mars Position at Arrival: {r2_mars} km\n')
-
-bodies =  [earth, venus, mercury, mars, jupiter, saturn, uranus, neptune]  
-central_body = sun
-fun_arg = [central_body, bodies]
-
-print("VALLADO FUNCTION")
-(v1_short, v2_short), = vallado.lambert(k, r1_earth*u.km, r2_mars*u.km, (tof.sec*u.s), short=True)
-print("Short Orbit Transfer")
-print(f"Departure velocity: {v1_short}")
-print(f"Arrival velocity: {v2_short}\n")
+print("="*140 + "\n")
 
 
-print("VRAJ FUNCTION")
-print("Short Orbit Transfer")
-transfer_short.a, transfer_short.p, transfer_short.e, transfer_short_v1, transfer_short_v2 = universal_lambert(
-    r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path='short')
-print(f'Short Transfer semi major axis is {transfer_short.a} km -->  {(transfer_short.a/149597870.7)} AU ')
-print(f'Short Transfer Eccentricity is: {transfer_short.e}')
-print(f'Departure velocity: {transfer_short_v1} km/s')
-print(f'Arrival velocity: {transfer_short_v2} km/s\n')
-
-
-print("Long Orbit Transfer")
-transfer_long.a, transfer_long.p, transfer_long.e, transfer_long_v1, transfer_long_v2 = universal_lambert(
-    r1_earth, r2_mars, (tof.sec), transfer_long.mu, desired_path='long')
-print( f'Long Transfer semi major axis is {transfer_long.a} km --> {(transfer_long.a/149597870.7)} AU')
-print(f'Long Transfer Eccentricity is: {transfer_long.e}')
-print(f'Departure velocity: {transfer_long_v1} km/s')
-print(f'Arrival velocity: {transfer_long_v2} km/s')
-
+# Find lowest C3 
+min_C3_idx = np.argmin([r['C3'] for r in results])
+print(f"Minimum C3 solution: TOF = {results[min_C3_idx]['tof_days']} days, "  f"C3 = {results[min_C3_idx]['C3']:.2f} km²/s²\n")

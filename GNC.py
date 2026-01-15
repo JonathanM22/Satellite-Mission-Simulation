@@ -16,13 +16,81 @@ from astropy.coordinates import solar_system_ephemeris
 from astropy.coordinates import get_body_barycentric_posvel
 from astropy.coordinates import get_body_barycentric
 
-result = np.load("mission_data.npz", allow_pickle=True)
 
+class Quaternion:
+
+    # q = [vector, scalor]
+    def __init__(self, vector, scalor):
+        self.scalor = scalor
+        self.vector = vector
+        self.q1 = vector[0]
+        self.q2 = vector[1]
+        self.q3 = vector[2]
+        self.q4 = scalor
+        self.value = np.array([self.q1, self.q2, self.q3, self.q4])
+
+    def identity(self):
+        return Quaternion(np.zeros(3), 1)
+
+    @staticmethod
+    def phi(q):
+        if not isinstance(q, Quaternion):
+            raise TypeError("Expected Quaternion")
+
+        q1, q2, q3, q4 = q.q1, q.q2, q.q3, q.q4
+
+        return np.array([
+            [q4,  q3, -q2],
+            [-q3,  q4,  q1],
+            [q2, -q1,  q4],
+            [-q1, -q2, -q3]
+        ])
+
+    @staticmethod
+    def eps(q):
+        if not isinstance(q, Quaternion):
+            raise TypeError("Expected Quaternion")
+
+        q1, q2, q3, q4 = q.q1, q.q2, q.q3, q.q4
+
+        return np.array([
+            [q4,  -q3, q2],
+            [q3,  q4,  -q1],
+            [-q2, q1,  q4],
+            [-q1, -q2, -q3]
+        ])
+
+
+def skew_mtx(x_vec):
+    x1 = x_vec[0]
+    x2 = x_vec[1]
+    x3 = x_vec[2]
+
+    return np.array([[0, -x3,  x2],
+                     [x3,   0, -x1],
+                     [-x2,  x1,   0]
+                     ])
+
+
+class ReactionWh:
+
+    def __init__(self, mass, J_spin, J_perp, wl_unit):
+        self.mass = mass
+        self.J_spin = J_spin
+        self.J_perp = J_perp
+        self.wl_unit = wl_unit
+        self.wl = 0
+
+    # Inertia of non-spin axises of reachtion wheel
+    def Jwh_body(self):
+        return self.J_perp*(np.identity(3) - np.outer(self.wl_unit, self.wl_unit))
+
+
+# Exporting earth_orbit sim data
+result = np.load("mission_data.npz", allow_pickle=True)
 sat = result['arr_0'][()]
 celestial_bodies = result['arr_1']
-
 earth_orbit = np.load("leg_1_data.npy", allow_pickle=True)[()]
-
 central_body = earth_orbit["central_body"]
 sat_orbit = earth_orbit["sat_orbit"]
 bodies = earth_orbit["bodies"]
@@ -34,6 +102,7 @@ y0 = earth_orbit["y0"]
 ts = earth_orbit["ts"]
 ys = earth_orbit["ys"]
 
+# Define sat and principle axis
 sat.inertia = np.array([[40, 0, 0],
                         [0, 50, 0],
                         [0, 0, 60]
@@ -48,54 +117,75 @@ S3 = V[:, 2]
 r = ys[0, 0:3]
 v = ys[0, 3:6]
 
-
+# Define LVLH frame
 O1 = -r/np.linalg.norm(r)
 O2 = -np.cross(r, v)/np.linalg.norm(np.cross(r, v))
 O3 = np.cross(O1, O2)
 
+# Define Reaction wheels
+wh1 = ReactionWh(1, 3, 6, np.array([1, 0, 0]))
+wh2 = ReactionWh(1, 3, 6, np.array([0, 1, 0]))
+wh3 = ReactionWh(1, 3, 6, np.array([0, 0, 1]))
 
-# Create a 3D plot
-ax = plt.figure().add_subplot(projection='3d')
-origin = np.array([0, 0, 0])
-O_colors = ['#D62828', '#003049', '#F77F00']
-S_colors = ['#FF6B9D', '#00B4D8', '#FFD60A']
+# JB = inertia of S/C with Jwh_body
+JB = sat.inertia + wh1.Jwh_body() + wh2.Jwh_body() + wh3.Jwh_body()
 
-# LVLH FRAME
-ax.quiver(origin[0], origin[1], origin[2],
-          O1[0], O1[1], O1[2],
-          color=O_colors[0], arrow_length_ratio=0.15, linewidth=2, label='O1')
+# Hwh_B = angular momentum of wheels in body frame
 
-ax.quiver(origin[0], origin[1], origin[2],
-          O2[0], O2[1], O2[2],
-          color=O_colors[1], arrow_length_ratio=0.15, linewidth=2, label='O2')
 
-ax.quiver(origin[0], origin[1], origin[2],
-          O3[0], O3[1], O3[2],
-          color=O_colors[2], arrow_length_ratio=0.15, linewidth=2, label='O3')
+def Hwh_B(wheels, w_b):
+    for wheel in wheels:
+        total_h += (wheel.J_spin *
+                    (np.dot(wheel.wl_unit, w_b) + wheel.wl))*wheel.wl_unit
 
-# SPACECRAFT PRINCIPAL AXIS FRAME
-ax.quiver(origin[0], origin[1], origin[2],
-          S1[0], S1[1], S1[2],
-          color=S_colors[0], arrow_length_ratio=0.15, linewidth=2, label='S1', linestyle='--')
 
-ax.quiver(origin[0], origin[1], origin[2],
-          S2[0], S2[1], S2[2],
-          color=S_colors[1], arrow_length_ratio=0.15, linewidth=2, label='S2', linestyle='--')
+# EOM
+# w_b = angular momentum of body relative to inertial in body frame
+w_b_dot = np.linalg.norm(JB)
 
-ax.quiver(origin[0], origin[1], origin[2],
-          S3[0], S3[1], S3[2],
-          color=S_colors[2], arrow_length_ratio=0.15, linewidth=2, label='S3', linestyle='--')
 
-# Set labels and title
-ax.set_xlabel('X')
-ax.set_ylabel('Y')
-ax.set_zlabel('Z')
-ax.set_title('Orbital Reference Frame (O1, O2, O3)')
-ax.set_xlim([-1, 1])
-ax.set_ylim([-1, 1])
-ax.set_zlim([-1, 1])
-ax.legend()
-ax.grid(True, alpha=0.3)
+# # Create a 3D plot
+# ax = plt.figure().add_subplot(projection='3d')
+# origin = np.array([0, 0, 0])
+# O_colors = ['#D62828', '#003049', '#F77F00']
+# S_colors = ['#FF6B9D', '#00B4D8', '#FFD60A']
 
-plt.tight_layout()
-plt.show()
+# # LVLH FRAME
+# ax.quiver(origin[0], origin[1], origin[2],
+#           O1[0], O1[1], O1[2],
+#           color=O_colors[0], arrow_length_ratio=0.15, linewidth=2, label='O1')
+
+# ax.quiver(origin[0], origin[1], origin[2],
+#           O2[0], O2[1], O2[2],
+#           color=O_colors[1], arrow_length_ratio=0.15, linewidth=2, label='O2')
+
+# ax.quiver(origin[0], origin[1], origin[2],
+#           O3[0], O3[1], O3[2],
+#           color=O_colors[2], arrow_length_ratio=0.15, linewidth=2, label='O3')
+
+# # SPACECRAFT PRINCIPAL AXIS FRAME
+# ax.quiver(origin[0], origin[1], origin[2],
+#           S1[0], S1[1], S1[2],
+#           color=S_colors[0], arrow_length_ratio=0.15, linewidth=2, label='S1', linestyle='--')
+
+# ax.quiver(origin[0], origin[1], origin[2],
+#           S2[0], S2[1], S2[2],
+#           color=S_colors[1], arrow_length_ratio=0.15, linewidth=2, label='S2', linestyle='--')
+
+# ax.quiver(origin[0], origin[1], origin[2],
+#           S3[0], S3[1], S3[2],
+#           color=S_colors[2], arrow_length_ratio=0.15, linewidth=2, label='S3', linestyle='--')
+
+# # Set labels and title
+# ax.set_xlabel('X')
+# ax.set_ylabel('Y')
+# ax.set_zlabel('Z')
+# ax.set_title('Orbital Reference Frame (O1, O2, O3)')
+# ax.set_xlim([-1, 1])
+# ax.set_ylim([-1, 1])
+# ax.set_zlim([-1, 1])
+# ax.legend()
+# ax.grid(True, alpha=0.3)
+
+# plt.tight_layout()
+# plt.show()

@@ -176,7 +176,7 @@ celestial_bodies = [sun, earth, moon, mars, mercury, jupiter, venus, saturn, ura
 
 # Intialize SAT
 SAT_MASS = 100*u.kg
-departure_date = Time("2026-11-08")
+departure_date = Time("2026-10-19")
 sat = Spacecraft(SAT_MASS, departure_date, label="sat", color="purple")
 
 '''
@@ -190,19 +190,43 @@ Iterate on Lambert's problem until you have chosen a solution that you are happy
 transfer_short = Orbit(mu=SUN_MU)
 transfer_long = Orbit(mu=SUN_MU)
 
+
+'''
+EXPERIMENTING WITH SYNODIC PERIODS
+'''
+
+# eqn found online for synodic period between two planets
+# Synodic period = 1 / |(1/T1) - (1/T2)|
+earth_period = 2*math.pi * np.sqrt((1.496e8**3)/SUN_MU)  # in seconds
+mars_period = 2*math.pi * np.sqrt((2.279e8**3)/SUN_MU)  # in seconds
+synodic_period_days = TimeDelta(1 / abs((1 / (earth_period/86400)) - (1 / (mars_period/86400))), format = 'jd')  
+print(f'Synodic Period between Earth and Mars is {synodic_period_days} days')
+
+
 """
 Using JPL data to get postion and velocity of earth (satellite) at departure and mars (target) at arrival)
 """
+
 solar_system_ephemeris.set('de432s')
 
-tof_range = list(range(100, 400, 10))
+# # number of synodic periods before and after launch date
+# n = 2
+# # loop through different synodic periods to confim validity
+# synodic_multiples = list(range(-n,n,1))
 
 results = []
+# for synodic_multiple in synodic_multiples:
+
+#     departure_date = departure_date + (synodic_multiple * synodic_period_days)
+tof_range = list(range(100, 400, 5))
+
+
 
 for tof_days in tof_range:
+
     tof = TimeDelta(tof_days, format='jd')
     arrival_date = departure_date + tof
-    print(f'{arrival_date}\n')
+    # print(f'{arrival_date}\n')
 
     # position vector of earth and mars (initial and final satellite positions) wrt to soloar system barycenter
     r1_earth_eci, v1_earth_eci = get_body_barycentric_posvel( 'earth', departure_date)
@@ -239,9 +263,9 @@ for tof_days in tof_range:
 
     # goes back to what poliastro was talking about: prograde and retrograde
 
-    print(f'-----------------------------------------------------------------------For TOF of {tof_days} days:-----------------------------------------------------------------------n')
-    print(f'Earth Position at Depature: {r1_earth} km')
-    print(f'Mars Position at Arrival: {r2_mars} km\n')
+    # print(f'-----------------------------------------------------------------------For TOF of {tof_days} days:-----------------------------------------------------------------------n')
+    # print(f'Earth Position at Depature: {r1_earth} km')
+    # print(f'Mars Position at Arrival: {r2_mars} km\n')
 
     bodies =  [earth, venus, mercury, mars, jupiter, saturn, uranus, neptune]  
     central_body = sun
@@ -284,6 +308,41 @@ for tof_days in tof_range:
             'arrival_date': arrival_date,
             'transfer_angle': np.degrees(transfer_angle)
         })
+    # results.append({
+    #     'synodic_multiple': synodic_multiple,
+    #     'departure_date': departure_date,
+    #     'tof_days': tof_days,
+    #     'C3': C3,
+    #     'V1': transfer_v1,
+    #     'V2': transfer_v2,
+    #     'V_earth': v1_earth,
+    #     'V_mars': v2_mars,
+    #     'V_inf_dep': np.sqrt(C3),
+    #     'Vinf_arrival': Vinf_arrival,
+    #     'r1': r1_earth,
+    #     'r2': r2_mars,
+    #     'arrival_date': arrival_date,
+    #     'transfer_angle': np.degrees(transfer_angle)
+    # })
+
+# for synodic_multiple in synodic_multiples:
+#     # Filter results for current synodic period
+#     period_results = [r for r in results if r['synodic_multiple'] == synodic_multiple]
+    
+#     if period_results:
+#         launch_date = period_results[0]['departure_date'].iso[:10]
+        
+#         print("\n" + "="*120)
+#         print(f"LAUNCH DATE: {launch_date} (Synodic Period Offset: {synodic_multiple:+d})")
+#         print("="*120)
+#         print(f"{'TOF (days)':<12} {'C3 (km²/s²)':<15} {'V∞ Dep (km/s)':<16} {'V∞ Arr (km/s)':<16} {'Transfer Angle (°)':<20} {'Arrival Date':<20}")
+#         print("="*120)
+        
+#         for res in period_results:
+#             print(f"{res['tof_days']:<12} {res['C3']:<15.2f} {res['V_inf_dep']:<16.3f} "
+#                   f"{res['Vinf_arrival']:<16.3f} {res['transfer_angle']:<20.5f} {res['arrival_date'].iso[:10]:<20}")
+        
+#         print("="*120)
 
 
 """
@@ -305,5 +364,13 @@ print("="*140 + "\n")
 
 
 # Find lowest C3 
+
+"""
+Finding optimal solution based on minimum C3 & Vinf at arrival. 
+"""
+
+# planning on making code more robust. Probably make a function that can take in different weights for C3 and Vinf at arrival to find the best solution based on preference.
+# this is fine for now. 
+
 min_C3_idx = np.argmin([r['C3'] for r in results])
 print(f"Minimum C3 solution: TOF = {results[min_C3_idx]['tof_days']} days, "  f"C3 = {results[min_C3_idx]['C3']:.2f} km²/s²\n")

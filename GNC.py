@@ -16,6 +16,20 @@ from astropy.coordinates import solar_system_ephemeris
 from astropy.coordinates import get_body_barycentric_posvel
 from astropy.coordinates import get_body_barycentric
 
+# Sets up single Runge Kutta 4 Step
+
+
+def RK4_single_step(fun, dt, t0, y0, fun_arg: list):
+
+    # evaluates inputted function, fun, at t0, y0, and inputted args to create 4 constants to solve 1 rk4 step
+    # inputted function name --> y_dot_n_ephemeris
+    k1 = fun(t0, y0, fun_arg)
+    k2 = fun((t0 + (dt/2)), (y0 + ((dt.value/2)*k1)), fun_arg)
+    k3 = fun((t0 + (dt/2)), (y0 + ((dt.value/2)*k2)), fun_arg)
+    k4 = fun((t0 + dt), (y0 + (dt.value*k3)), fun_arg)
+    y1 = y0 + (dt.value/6)*(k1 + 2*k2 + 2*k3 + k4)
+    return y1
+
 
 class Quaternion:
 
@@ -26,7 +40,7 @@ class Quaternion:
         self.q3 = q3
         self.q4 = q4
         self.scalor = q4
-        self.vector = np.array([q1, q2, q3])
+        self.vector = np.array([q1, q2, q3]).reshape(3, 1)
         self.value = np.array(
             [self.q1, self.q2, self.q3, self.q4]).reshape(4, 1)
 
@@ -138,7 +152,13 @@ class ReactionWh:
 
     # Hwh_body = angular momentum of wheels in body frame
     def Hwh_body(self, sat_w):
-        return self.J_spin*(np.dot(self.wl_unit, sat_w) + self.wl)*self.wl_unit
+        return self.J_spin*(self.wl_unit*sat_w + self.wl)*self.wl_unit
+
+# EOM
+
+
+def sat_dynamics(sat_h, sat_w, Lwh_b):
+    return np.linalg.inv(JB)@(-Lwh_b-(np.cross(sat_w, sat_h, axis=0)))
 
 
 # Exporting earth_orbit sim data
@@ -178,22 +198,19 @@ O2 = -np.cross(r, v)/np.linalg.norm(np.cross(r, v))
 O3 = np.cross(O1, O2)
 
 # Define Reaction wheels
-wh1 = ReactionWh(1, 3, 6, np.array([1, 0, 0]))
-wh2 = ReactionWh(1, 3, 6, np.array([0, 1, 0]))
-wh3 = ReactionWh(1, 3, 6, np.array([0, 0, 1]))
+wh1 = ReactionWh(1, 3, 6, np.array([1, 0, 0]).reshape(3, 1))
+wh2 = ReactionWh(1, 3, 6, np.array([0, 1, 0]).reshape(3, 1))
+wh3 = ReactionWh(1, 3, 6, np.array([0, 0, 1]).reshape(3, 1))
 
 # JB = inertia of S/C with Jwh_body
 JB = sat.inertia + wh1.Jwh_body_perp() + wh2.Jwh_body_perp() + \
     wh3.Jwh_body_perp()
 
-
-# intial sat position
-psi0 = 60
-theat0 = 0
-phi0 = 0
-q_sat = euler_to_quat(np.deg2rad(psi0), np.deg2rad(theat0), np.deg2rad(phi0))
-sat_w = np.array([3, 0, 0])
-
+# Sim vars
+t0 = 0
+tf = 10
+dt = 0.01
+ts = np.arange(t0, tf + dt, dt)
 
 # Commanded sat position
 psi_c = 30
@@ -202,21 +219,48 @@ phi_c = 0
 q_c = euler_to_quat(np.deg2rad(
     psi_c), np.deg2rad(theat_c), np.deg2rad(phi_c))
 
-q_error = q_sat.cross(q_c.inverse())
-print(q_error.value)
-
-sat_w = np.array([3, 0, 0])
-
-# Total Angular momentum of sat with wheels
-total_wh_h = wh1.Hwh_body(sat_w) + wh2.Hwh_body(sat_w) + wh3.Hwh_body(sat_w)
-sat_h = (JB*sat_w) + total_wh_h
-
-# EOM
+# intial sat position
+psi0 = 60
+theat0 = 0
+phi0 = 0
+q_sat0 = euler_to_quat(np.deg2rad(psi0), np.deg2rad(theat0), np.deg2rad(phi0))
 # sat_w = angular momentum of body relative to inertial in body frame
+sat_w0 = np.array([3, 0, 0]).reshape(3, 1)
 
+q_error_0 = q_sat0.cross(q_c.inverse())
 
-def sat_w_dot(JB, Lwh_b, sat_w, total_wh_h):
-    return np.linalg.inv(JB)*(-Lwh_b - (np.cross(sat_w, (JB*sat_w + total_wh_h))))
+kp = 50
+kd = 100
+
+q_sat_hist = np.zeros((len(ts), 4))
+L_hist = np.zeros((len(ts), 3))
+q_error = q_error_0
+q_sat = q_sat0
+sat_w = sat_w0
+
+for i, t in enumerate(ts):
+    q_sat_hist[i] = q_sat.value.reshape(4)
+
+    Lwh_b = -kp*np.sign(q_error.q4)*q_error.vector - kd*sat_w
+    L_hist[i] = Lwh_b.reshape(3)
+
+    # Total Angular momentum of sat with wheels
+    total_wh_h0 = (wh1.Hwh_body(sat_w) + (Lwh_b*wh1.wl_unit)*dt) + \
+        (wh2.Hwh_body(sat_w) + (Lwh_b*wh2.wl_unit)*dt) + \
+        (wh3.Hwh_body(sat_w) + (Lwh_b*wh3.wl_unit)*dt)
+
+    sat_h = (JB@sat_w) + total_wh_h0
+
+    # EOM of sat
+    sat_w_dot = sat_dynamics(sat_h, sat_w, Lwh_b)
+
+    sat_w = sat_w + sat_w_dot*dt
+
+    # Dynamics of Quaternion
+    q_sat_dot = 0.5*Quaternion.eps(q_sat0) @ sat_w
+
+    q_sat = q_sat0.value + q_sat_dot*dt
+    q_sat = Quaternion(q_sat[0], q_sat[1], q_sat[2], q_sat[3])
 
 
 print("done")

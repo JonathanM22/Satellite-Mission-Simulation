@@ -154,22 +154,46 @@ def y_dot_n_ephemeris(t, y, fun_arg: list):
         # print(f'Accel from {body.label}: {a_k}')
 
         # acceleration on CB due to kth body 
-        # a_cb_k = ((body.mu)/(np.linalg.norm(r_ck)**3)) * r_ck
+        a_cb_k = ((body.mu)/(np.linalg.norm(r_ck)**3)) * r_ck
 
         # if r and v were wrt to barycenter, we would just have a = a + a_k ( a_cb_k term only arises since we are wrt central body, which is also being accelerated by other bodies)
         # total acceleration on satellite due to all bodies
-        # a = a + a_k - a_cb_k
-        a = a + a_k 
+        a = a + a_k - a_cb_k
 
-        y_dot = np.concatenate((v, a))
+        '''
+        
+        Since the Sun is being accelerated by other bodies (Jupiter especially), the Sun-centered frame is non-inertial.
+
+        Newtons laws are only valid in inertial frames of reference. Since the central body is being accelerated by other bodies, it is not an inertial frame.
+        Therefore, we have to account for the acceleration of the central body due to the other bodies when calculating the acceleration of the satellite.
+        This is done by subtracting the acceleration of the central body due to the kth body from the acceleration of the satellite due to the kth body.
+        This ensures that the acceleration of the satellite is calculated in an inertial frame of reference.
+
+        we are "correcting" for the non inertial frame of reference ( the sun ) by subtracting its acceleration due to other bodies from the satellites acceleration
+
+        WE AREN'T SAYING THE SUN IS INERTIAL. WE ARE JUST MAKING THE EQUATIONS WORK BY ACCOUNTING FOR ITS ACCELERATION.
+
+        SINCE WE WANT THE SATS MOTION WRT THE SUN, WE HAVE TO CORRECT FOR THE SUNS NON INTERIAL ACCELERAITON
+
+        WE AREN'T DOING A FRAME TRANSFORMATION. WE ARE DOING RELATIVE MOTION FORUMUATION. aS LONG AS ALL ACCEL IS CALC'D IN THE INERTIAL FRAME AND WE SUBTRACT THE CENTRAL BODY ACC, THE REL MOTION IS VALID
+
+        *** - IF OUR SAT IS WRT TO BODY THAT IS ACC, MUST SUBTRACT ACC. THE SUN BEING NON INERTIAL IS FINE AS LONG AS WE ACCOUNT FOR IT: THE MOTION IS STILL HELIOCENTRIC, JUST RELATIVE TO THE ACCELERATING SUN 
+
+        SUN CENTERED FRAME IS NON INERTIAL, BUT WE ARE ACCOUNTING FOR IT BY SUBTRACTING THE SUNS ACCELERATION DUE TO OTHER BODIES FROM THE SATELLITES ACCELERATION DUE TO THOSE BODIES
+        
+        WE'RE WORKING WITH A RELATIVE SUN CENTERED FRAME. By correcting for the Suns acceleration, the relative equations of motion are equivalent to those written in an inertial frame.”
+
+        '''
+
+    y_dot = np.concatenate((v, a))
 
     return y_dot
 
 """
 Constants and Intialization
 """
-program_start_timer = time.perf_counter()
-print("\n----------------Started Simulation----------------\n")
+# program_start_timer = time.perf_counter()
+print("\n------------------------------------------------------------------------------------------------Started Simulation------------------------------------------------------------------------------------------------n")
 
 # Bodies to save for entire mission plotter
 celestial_bodies = [sun, earth, moon, mars, mercury, jupiter, venus, saturn, uranus, neptune]
@@ -218,7 +242,7 @@ results = []
 # for synodic_multiple in synodic_multiples:
 
 #     departure_date = departure_date + (synodic_multiple * synodic_period_days)
-tof_range = list(range(100, 400, 5))
+tof_range = list(range(100, 400, 1))
 
 
 
@@ -229,8 +253,8 @@ for tof_days in tof_range:
     # print(f'{arrival_date}\n')
 
     # position vector of earth and mars (initial and final satellite positions) wrt to soloar system barycenter
-    r1_earth_eci, v1_earth_eci = get_body_barycentric_posvel( 'earth', departure_date)
-    r2_mars_eci, v2_mars_eci = get_body_barycentric_posvel('mars', departure_date+tof)
+    r1_earth_bary, v1_earth_bary = get_body_barycentric_posvel( 'earth', departure_date)
+    r2_mars_bary, v2_mars_bary = get_body_barycentric_posvel('mars', departure_date+tof)
 
     """
     Need to get sun position and velocity to transform
@@ -246,12 +270,12 @@ for tof_days in tof_range:
     """
 
     # Position & Velocity of earth (satellite) wrt respect to sun @ Depature
-    r1_earth = (r1_earth_eci.xyz - r_sun1.xyz).to(u.km).value  # type:ignore
-    v1_earth = (v1_earth_eci.xyz - v_sun1.xyz).to(u.km/u.s).value  # type:ignore
+    r1_earth = (r1_earth_bary.xyz - r_sun1.xyz).to(u.km).value  # type:ignore
+    v1_earth = (v1_earth_bary.xyz - v_sun1.xyz).to(u.km/u.s).value  # type:ignore
 
     # Position & Velocity of mars (satellite) wrtrespect to sun @ Depature
-    r2_mars = (r2_mars_eci.xyz - r_sun2.xyz).to(u.km).value  # type:ignore
-    v2_mars = (v2_mars_eci.xyz - v_sun2.xyz).to(u.km/u.s).value
+    r2_mars = (r2_mars_bary.xyz - r_sun2.xyz).to(u.km).value  # type:ignore
+    v2_mars = (v2_mars_bary.xyz - v_sun2.xyz).to(u.km/u.s).value
 
     # cant get much frmo this since its restricted to 0 - pi
     transfer_angle = (np.acos(np.dot(r1_earth, r2_mars) / (np.linalg.norm(r1_earth) * np.linalg.norm(r2_mars))))
@@ -263,7 +287,7 @@ for tof_days in tof_range:
 
     # goes back to what poliastro was talking about: prograde and retrograde
 
-    # print(f'-----------------------------------------------------------------------For TOF of {tof_days} days:-----------------------------------------------------------------------n')
+    # print(f------------------------------------------------------------------------------------------------For TOF of {tof_days} days------------------------------------------------------------------------------------------------n')
     # print(f'Earth Position at Depature: {r1_earth} km')
     # print(f'Mars Position at Arrival: {r2_mars} km\n')
 
@@ -292,7 +316,8 @@ for tof_days in tof_range:
         transfer_v1 = transfer_v1_long
         transfer_v2 = transfer_v2_long
 
-    Vinf_arrival = np.linalg.norm(transfer_v2 - v2_mars)
+    Vinf_arrival = (transfer_v2 - v2_mars) # arrival hyperbolic excess velcity in the MCI frame
+    Vinf_departure = (transfer_v1 - v1_earth) # departure hyperbolic excess velociy in the ECI frame
 
     results.append({
             'tof_days': tof_days,
@@ -301,13 +326,13 @@ for tof_days in tof_range:
             'V2': transfer_v2,
             'V_earth': v1_earth,
             'V_mars': v2_mars,
-            'V_inf_dep': np.sqrt(C3),
+            'V_inf_dep': Vinf_departure,
             'Vinf_arrival': Vinf_arrival,
             'r1': r1_earth,
             'r2': r2_mars,
             'arrival_date': arrival_date,
             'transfer_angle': np.degrees(transfer_angle)
-        })
+     })
     # results.append({
     #     'synodic_multiple': synodic_multiple,
     #     'departure_date': departure_date,
@@ -357,20 +382,80 @@ print(f"{'TOF (days)':<12} {'C3 (km²/s²)':<15} {'V∞ Dep (km/s)':<16} {'V∞ 
 print("="*140)
 
 for res in results:
-    print(f"{res['tof_days']:<12} {res['C3']:<15.2f} {res['V_inf_dep']:<16.3f} "
-          f"{res['Vinf_arrival']:<16.3f} {res['transfer_angle']:<20.5f} {res['arrival_date'].iso[:10]:<20}")
+    print(f"{res['tof_days']:<12} {res['C3']:<15.2f} {np.linalg.norm(res['V_inf_dep']):<16.3f} "
+          f"{np.linalg.norm(res['Vinf_arrival']):<16.3f} {res['transfer_angle']:<20.5f} {res['arrival_date'].iso[:10]:<20}")
 
 print("="*140 + "\n")
-
-
-# Find lowest C3 
 
 """
 Finding optimal solution based on minimum C3 & Vinf at arrival. 
 """
 
-# planning on making code more robust. Probably make a function that can take in different weights for C3 and Vinf at arrival to find the best solution based on preference.
-# this is fine for now. 
+def find_optimal_solution(results, weight_C3, weight_Vinf): 
 
-min_C3_idx = np.argmin([r['C3'] for r in results])
-print(f"Minimum C3 solution: TOF = {results[min_C3_idx]['tof_days']} days, "  f"C3 = {results[min_C3_idx]['C3']:.2f} km²/s²\n")
+    # extracting C3 and Vinf arrival values
+    C3_values = np.array([r['C3'] for r in results])
+    Vinf_values = np.array([r['Vinf_arrival'] for r in results])
+    Vinf_mag = np.linalg.norm(Vinf_values, axis=1)
+
+    # tof_values = np.array([r['tof_days'] for r in results])
+
+    # normalzing them to be between 0 and 1 
+    C3_norm = (C3_values - np.min(C3_values)) / (np.max(C3_values) - np.min(C3_values))
+    Vinf_norm = (Vinf_mag - np.min(Vinf_mag)) / (np.max(Vinf_mag) - np.min(Vinf_mag))
+
+    # give weighted scoe
+    score = (weight_C3 * C3_norm) + (weight_Vinf * Vinf_norm)
+    # minimize
+    optimal_idx = np.argmin(score)
+    optimal_C3 = C3_values[optimal_idx]
+    optimal_Vinf = Vinf_values[optimal_idx]
+    optimal_solution = [optimal_C3, optimal_Vinf]
+
+    print(f"\nOptimal Mission Duration: {results[optimal_idx]['tof_days']} Days. Arrival Date = {departure_date+results[optimal_idx]['tof_days']} with (C3: {optimal_solution[0]:.3f} km²/s², Vinf Arrival: {Vinf_mag[optimal_idx]:.3f}) km/s\n")
+    return optimal_solution
+
+# outputs array of optimal C3 & Vinf arrival based on assigned weights ( user defined )
+optimal_solution = find_optimal_solution(results, weight_C3=0.75, weight_Vinf=0.25)
+
+'''
+at this point I can differ my approach. 
+1. min good balance between c3 and vinf arrival --> convert to raan/dec/inclination for launch window --> continue with what Dr Ozimek suggested
+2. Select best C3 and vinf arrival --> full n-body simulaiton from Earth and Mars using rk4 & ydot_n_ephemeris --> 
+    diff between r2_mars & final pos form n-body sim to see how close we are to mars --> 
+        adjust initial vel accordingly and re run n-body sim until close enough to mars (for some cap) --> 
+           B-plane targetting
+'''
+
+'''
+Step 2: Converting Vinf to RAAN/DEC/Inclination
+'''
+
+# to get declination and RAAN from vinf vector, we need the velocity to be in the ECI frame --> alr is 
+
+def vinf_to_raan_dec(Vinf): 
+
+    Dec = np.arcsin(Vinf[2]/np.linalg.norm(Vinf))
+    RAAN = np.arctan2(Vinf[1],Vinf[0])
+    print(f'RAAN: {np.degrees(RAAN): .3f}° | Declination: {np.degrees(Dec): .3f}°')
+
+    return RAAN, Dec
+
+RAAN_dep, Dec_dep = vinf_to_raan_dec(optimal_solution[1]) 
+print(f'Outbound RAAN = {np.degrees(RAAN_dep): .3f}° | Outbound Declination = {np.degrees(Dec_dep): .3f}°\n')
+
+
+# Gonna pause here and try to do n-body correction
+
+central_body = sun
+bodies = [mercury,venus,jupiter,saturn,uranus,neptune]
+fun_arg = [central_body,bodies]
+
+# _, _, ys = propagate_rk4(sat.r0.value, sat.v0.value, t0, tf, dt, fun_arg)
+dt = TimeDelta(60, format='sec')
+r_sats, v_sats, ys_sats = propagate_rk4(r1_earth, transfer_v1, departure_date, arrival_date, dt, fun_arg=fun_arg)
+
+r_mars_miss = r_sats[-1] - r2_mars
+print(f'Satellite Missed Mars Target by {np.linalg.norm(r_mars_miss):.5f} km')
+
+# --> work on diff eq corrector

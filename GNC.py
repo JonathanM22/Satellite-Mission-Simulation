@@ -60,7 +60,10 @@ class Quaternion:
         if not isinstance(q, Quaternion):
             raise TypeError("Expected Quaternion")
 
-        q1, q2, q3, q4 = q.q1, q.q2, q.q3, q.q4
+        q1 = q.value[0][0]
+        q2 = q.value[1][0]
+        q3 = q.value[2][0]
+        q4 = q.value[3][0]
 
         return np.array([
             [q4,  q3, -q2],
@@ -74,7 +77,10 @@ class Quaternion:
         if not isinstance(q, Quaternion):
             raise TypeError("Expected Quaternion")
 
-        q1, q2, q3, q4 = q.q1, q.q2, q.q3, q.q4
+        q1 = q.value[0][0]
+        q2 = q.value[1][0]
+        q3 = q.value[2][0]
+        q4 = q.value[3][0]
 
         return np.array([
             [q4,  -q3, q2],
@@ -208,7 +214,7 @@ JB = sat.inertia + wh1.Jwh_body_perp() + wh2.Jwh_body_perp() + \
 
 # Sim vars
 t0 = 0
-tf = 10
+tf = 200
 dt = 0.01
 ts = np.arange(t0, tf + dt, dt)
 
@@ -241,13 +247,16 @@ sat_w = sat_w0
 for i, t in enumerate(ts):
     q_sat_hist[i] = q_sat.value.reshape(4)
 
-    Lwh_b = -kp*np.sign(q_error.q4)*q_error.vector - kd*sat_w
+    Lwh_b = kp*q_error.vector + kd*sat_w
     L_hist[i] = Lwh_b.reshape(3)
 
     # Total Angular momentum of sat with wheels
-    total_wh_h0 = (wh1.Hwh_body(sat_w) + (Lwh_b*wh1.wl_unit)*dt) + \
-        (wh2.Hwh_body(sat_w) + (Lwh_b*wh2.wl_unit)*dt) + \
-        (wh3.Hwh_body(sat_w) + (Lwh_b*wh3.wl_unit)*dt)
+    total_wh_h0 = wh1.Hwh_body(
+        sat_w) + wh2.Hwh_body(sat_w) + wh3.Hwh_body(sat_w)
+
+    # total_wh_h0 = (wh1.Hwh_body(sat_w) + (Lwh_b*wh1.wl_unit)*dt) + \
+    # (wh2.Hwh_body(sat_w) + (Lwh_b*wh2.wl_unit)*dt) + \
+    # (wh3.Hwh_body(sat_w) + (Lwh_b*wh3.wl_unit)*dt)
 
     sat_h = (JB@sat_w) + total_wh_h0
 
@@ -257,10 +266,12 @@ for i, t in enumerate(ts):
     sat_w = sat_w + sat_w_dot*dt
 
     # Dynamics of Quaternion
-    q_sat_dot = 0.5*Quaternion.eps(q_sat0) @ sat_w
+    q_sat_dot = 0.5*Quaternion.eps(q_sat) @ sat_w
 
-    q_sat = q_sat0.value + q_sat_dot*dt
+    q_sat = q_sat.value + q_sat_dot*dt
     q_sat = Quaternion(q_sat[0], q_sat[1], q_sat[2], q_sat[3])
+
+    q_error = q_sat.cross(q_c.inverse())
 
 
 print("done")

@@ -50,6 +50,7 @@ class Spacecraft(Body):
 
         self.inertia = np.zeros((3, 3))
         self.model = ""
+        self.w_ar = np.zeros(1)
 
 
 MOON_MASS = (7.34 * 10**22) * u.kg
@@ -69,7 +70,8 @@ URANAS_MASS = (8.681 * 10**25) * u.kg
 NEPTUNE_MASS = (1.024 * 10**26) * u.kg
 MERCURY_MASS = (3.285 * 10**23) * u.kg
 VENUS_MASS = (4.867 * 10**24) * u.kg
-SOLAR_SYS_MASS = SUN_MASS + EARTH_MASS + MARS_MASS + JUPITER_MASS + SATURN_MASS + URANAS_MASS + NEPTUNE_MASS + MERCURY_MASS + VENUS_MASS
+SOLAR_SYS_MASS = SUN_MASS + EARTH_MASS + MARS_MASS + JUPITER_MASS + \
+    SATURN_MASS + URANAS_MASS + NEPTUNE_MASS + MERCURY_MASS + VENUS_MASS
 SOLAR_SYS_MU = SOLAR_SYS_MASS * G
 
 # Intialize bodies

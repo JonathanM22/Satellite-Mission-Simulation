@@ -3,6 +3,7 @@ from orbit import *
 from Orbit_util import *
 from body import *
 from Universal_Variable import *
+from quaternion import *
 
 # Standard libs
 import numpy as np
@@ -20,82 +21,17 @@ from astropy.coordinates import get_body_barycentric
 
 
 def RK4_single_step(fun, dt, t0, y0, fun_arg: list):
-
     # evaluates inputted function, fun, at t0, y0, and inputted args to create 4 constants to solve 1 rk4 step
     # inputted function name --> y_dot_n_ephemeris
     k1 = fun(t0, y0, fun_arg)
-    k2 = fun((t0 + (dt/2)), (y0 + ((dt.value/2)*k1)), fun_arg)
-    k3 = fun((t0 + (dt/2)), (y0 + ((dt.value/2)*k2)), fun_arg)
-    k4 = fun((t0 + dt), (y0 + (dt.value*k3)), fun_arg)
-    y1 = y0 + (dt.value/6)*(k1 + 2*k2 + 2*k3 + k4)
+    k2 = fun((t0 + (dt/2)), (y0 + ((dt/2)*k1)), fun_arg)
+    k3 = fun((t0 + (dt/2)), (y0 + ((dt/2)*k2)), fun_arg)
+    k4 = fun((t0 + dt), (y0 + (dt*k3)), fun_arg)
+
+    y1 = y0 + (dt/6)*(k1 + 2*k2 + 2*k3 + k4)
     return y1
 
-
-class Quaternion:
-
-    # q = [vector, scalor]
-    def __init__(self, q1, q2, q3, q4):
-        self.q1 = q1
-        self.q2 = q2
-        self.q3 = q3
-        self.q4 = q4
-        self.scalor = q4
-        self.vector = np.array([q1, q2, q3]).reshape(3, 1)
-        self.value = np.array(
-            [self.q1, self.q2, self.q3, self.q4]).reshape(4, 1)
-
-    def inverse(self):
-        q_mag = np.linalg.norm(self.value)
-        q_conj = np.array([-self.q1, -self.q2, -self.q3, self.q4])
-        q_inv = q_conj / (q_mag**2)
-
-        return Quaternion(q_inv[0], q_inv[1], q_inv[2], q_inv[3])
-
-    @staticmethod
-    def identity():
-        return Quaternion(np.zeros(3), 1)
-
-    @staticmethod
-    def phi(q):
-        if not isinstance(q, Quaternion):
-            raise TypeError("Expected Quaternion")
-
-        q1 = q.value[0][0]
-        q2 = q.value[1][0]
-        q3 = q.value[2][0]
-        q4 = q.value[3][0]
-
-        return np.array([
-            [q4,  q3, -q2],
-            [-q3,  q4,  q1],
-            [q2, -q1,  q4],
-            [-q1, -q2, -q3]
-        ])
-
-    @staticmethod
-    def eps(q):
-        if not isinstance(q, Quaternion):
-            raise TypeError("Expected Quaternion")
-
-        q1 = q.value[0][0]
-        q2 = q.value[1][0]
-        q3 = q.value[2][0]
-        q4 = q.value[3][0]
-
-        return np.array([
-            [q4,  -q3, q2],
-            [q3,  q4,  -q1],
-            [-q2, q1,  q4],
-            [-q1, -q2, -q3]
-        ])
-
-    def cross(self, q2):
-        result = np.block([Quaternion.phi(self), self.value]) @ q2.value
-        return Quaternion(result[0], result[1], result[2], result[3])
-
-    def dot(self, q2):
-        result = np.block([Quaternion.eps(self), self.value]) @ q2.value
-        return Quaternion(result[0], result[1], result[2], result[3])
+# sat_w_n+1 = sat_w_n + sat_w_dot*dt
 
 
 def skew_mtx(x_vec):
@@ -109,7 +45,7 @@ def skew_mtx(x_vec):
                      ])
 
 
-def euler_313(psi, theta, phi):
+def euler_321(psi, theta, phi):
     # Appendix B 3-2-1 matrix OR sec 2.9 pg55
     A11 = np.cos(theta)*np.cos(phi)
     A12 = np.cos(theta)*np.sin(phi)
@@ -126,7 +62,7 @@ def euler_313(psi, theta, phi):
                     [A31, A32, A33])
 
 
-def euler_to_quat(psi, theta, phi):
+def euler321_to_quat(psi, theta, phi):
     # Appendix B: 3-2-1 -> quaternion
     q1 = np.cos(phi/2)*np.cos(theta/2)*np.sin(psi/2) - \
         np.sin(phi/2)*np.sin(theta/2)*np.cos(psi/2)
@@ -140,7 +76,7 @@ def euler_to_quat(psi, theta, phi):
     q4 = np.cos(phi/2)*np.cos(theta/2)*np.cos(psi/2) + \
         np.sin(phi/2)*np.sin(theta/2)*np.sin(psi/2)
 
-    return Quaternion(q1, q2, q3, q4)
+    return Quaternion(np.array([q1, q2, q3, q4]).reshape(4, 1))
 
 
 class ReactionWh:
@@ -175,13 +111,13 @@ earth_orbit = np.load("leg_1_data.npy", allow_pickle=True)[()]
 central_body = earth_orbit["central_body"]
 sat_orbit = earth_orbit["sat_orbit"]
 bodies = earth_orbit["bodies"]
-dt = earth_orbit["dt"]
-n_steps_1 = earth_orbit["n_steps"]
-t0 = earth_orbit["t0"]
-tf = earth_orbit["tf"]
-y0 = earth_orbit["y0"]
-ts = earth_orbit["ts"]
-ys = earth_orbit["ys"]
+orbit_dt = earth_orbit["dt"]
+orbit_n_steps_1 = earth_orbit["n_steps"]
+orbit_t0 = earth_orbit["t0"]
+orbit_tf = earth_orbit["tf"]
+orbit_y0 = earth_orbit["y0"]
+orbit_ts = earth_orbit["ts"]
+orbit_ys = earth_orbit["ys"]
 
 # Define sat and principle axis
 sat.inertia = np.array([[40, 0, 0],
@@ -195,8 +131,8 @@ S1 = V[:, 0]
 S2 = V[:, 1]
 S3 = V[:, 2]
 
-r = ys[0, 0:3]
-v = ys[0, 3:6]
+r = orbit_ys[0, 0:3]
+v = orbit_ys[0, 3:6]
 
 # Define LVLH frame
 O1 = -r/np.linalg.norm(r)
@@ -212,38 +148,148 @@ wh3 = ReactionWh(1, 3, 6, np.array([0, 0, 1]).reshape(3, 1))
 JB = sat.inertia + wh1.Jwh_body_perp() + wh2.Jwh_body_perp() + \
     wh3.Jwh_body_perp()
 
-# Sim vars
+# Sim var
+kp = 10
+kd = 20
+
 t0 = 0
-tf = 200
-dt = 0.01
+tf = 50
+dt = .25
 ts = np.arange(t0, tf + dt, dt)
+n_steps = len(ts)
+ys = np.zeros((n_steps, 7))
+
+q_sat_hist = np.zeros((n_steps, 4))
+q_error_hist = np.zeros((n_steps, 4))
+sat_w_hist = np.zeros((n_steps, 3))
+L_hist = np.zeros((n_steps, 3))
 
 # Commanded sat position
 psi_c = 30
-theat_c = 0
-phi_c = 0
-q_c = euler_to_quat(np.deg2rad(
+theat_c = 45
+phi_c = 60
+q_c = euler321_to_quat(np.deg2rad(
     psi_c), np.deg2rad(theat_c), np.deg2rad(phi_c))
 
 # intial sat position
 psi0 = 60
-theat0 = 0
-phi0 = 0
-q_sat0 = euler_to_quat(np.deg2rad(psi0), np.deg2rad(theat0), np.deg2rad(phi0))
+theat0 = 45
+phi0 = 30
+q_sat0 = euler321_to_quat(np.deg2rad(
+    psi0), np.deg2rad(theat0), np.deg2rad(phi0))
+
 # sat_w = angular momentum of body relative to inertial in body frame
-sat_w0 = np.array([3, 0, 0]).reshape(3, 1)
+sat_w0 = np.array([3, -7, 2]).reshape(3, 1)
 
-q_error_0 = q_sat0.cross(q_c.inverse())
 
-kp = 50
-kd = 100
+y0 = np.concatenate([q_sat0.value.flatten(), sat_w0.flatten()])
 
-q_sat_hist = np.zeros((len(ts), 4))
-L_hist = np.zeros((len(ts), 3))
-q_error = q_error_0
-q_sat = q_sat0
-sat_w = sat_w0
+ys[0] = y0
+ts[0] = t0
 
+
+def y_dot_gnc(t, y, fun_arg: list):
+
+    q_sat = Quaternion(y[0:4].reshape(4, 1))
+    q_sat = q_sat.normalized()
+    sat_w = y[4:].reshape(3, 1)
+    JB = fun_arg[0]
+    Lwh_b = fun_arg[1]
+
+    total_wh_h = wh1.Hwh_body(
+        sat_w) + wh2.Hwh_body(sat_w) + wh3.Hwh_body(sat_w)
+    sat_h = (JB@sat_w) + total_wh_h
+    sat_w_dot = sat_dynamics(sat_h, sat_w, Lwh_b)
+
+    q_sat_dot = q_sat.kinamatics(sat_w)
+
+    return np.concatenate([q_sat_dot.value.flatten(), sat_w_dot.flatten()])
+
+
+for i in range(n_steps-1):
+
+    # For calcs
+    q_sat = Quaternion(ys[i][0:4].reshape(4, 1))
+    q_sat = q_sat.normalized()
+    sat_w = ys[i][4:].reshape(3, 1)
+
+    # Calc Control Moment
+    q_error = q_sat.cross(q_c.inverse())
+    Lwh_b = (-kp*q_error.vector - kd*sat_w)*-1
+
+    # Propgate one step w/ Control Moment
+    ys[i+1] = RK4_single_step(y_dot_gnc, dt, ts[i], ys[i], fun_arg=[JB, Lwh_b])
+
+    # For plotting
+    q_sat_hist[i] = ys[i][0:4].flatten()
+    sat_w_hist[i] = ys[i][4:].flatten()
+    q_error_hist[i] = q_error.value.flatten()
+    L_hist[i] = Lwh_b.flatten()
+
+# For plotting
+q_sat_hist[i+1] = ys[i][0:4].flatten()
+sat_w_hist[i+1] = ys[i][4:].flatten()
+q_error_hist[i+1] = q_error.value.flatten()
+L_hist[i+1] = Lwh_b.flatten()
+
+(f'------------------------------------------------------------------------')
+
+"""PLOT Q_SAT VS Q_C"""
+plt.figure(figsize=(8, 10))
+ax1 = plt.subplot(4, 1, 1)
+ax1.plot(q_sat_hist[:, 0], color='tab:red', label='q1')
+ax1.axhline(y=q_c.q1, color='tab:red', linestyle='--', label='qc1')
+ax1.plot(q_sat_hist[:, 1], color='tab:green', label='q2')
+ax1.axhline(y=q_c.q2, color='tab:green', linestyle='--', label='qc2')
+ax1.plot(q_sat_hist[:, 2], color='tab:blue', label='q3')
+ax1.axhline(y=q_c.q3, color='tab:blue', linestyle='--', label='qc3')
+ax1.plot(q_sat_hist[:, 3], color='tab:orange', label='q4')
+ax1.axhline(y=q_c.q4, color='tab:orange', linestyle='--', label='qc4')
+ax1.set_xlabel("steps")
+ax1.set_ylabel("Sat Quaternion")
+ax1.set_title("Sat Quaternion Converging To Commanded")
+ax1.legend(loc='right')
+ax1.grid(True)
+
+"""PLOT Q_ERROR"""
+ax1 = plt.subplot(4, 1, 2)
+ax1.plot(q_error_hist[:, 0], color='tab:red', label='q1')
+ax1.plot(q_error_hist[:, 1], color='tab:green', label='q2')
+ax1.plot(q_error_hist[:, 2], color='tab:blue', label='q3')
+ax1.plot(q_error_hist[:, 3], color='tab:orange', label='q4')
+ax1.set_xlabel("steps")
+ax1.set_ylabel("Quaternion Error")
+ax1.set_title("Quaternion Error vs steps")
+ax1.legend(loc='right')
+ax1.grid(True)
+
+"""PLOT SAT_W"""
+ax1 = plt.subplot(4, 1, 3)
+ax1.plot(sat_w_hist[:, 0], color='tab:red', label='w1')
+ax1.plot(sat_w_hist[:, 1], color='tab:green', label='w2')
+ax1.plot(sat_w_hist[:, 2], color='tab:blue', label='w3')
+ax1.set_xlabel("steps")
+ax1.set_ylabel("sat_w")
+ax1.set_title("Sat Angular Velocity vs steps")
+ax1.legend(loc='right')
+ax1.grid(True)
+
+"""PLOT CONTROL MOMENT"""
+ax1 = plt.subplot(4, 1, 4)
+ax1.plot(L_hist[:, 0], color='tab:red', label='w1')
+ax1.plot(L_hist[:, 1], color='tab:green', label='w2')
+ax1.plot(L_hist[:, 2], color='tab:blue', label='w3')
+ax1.set_xlabel("steps")
+ax1.set_ylabel("L")
+ax1.set_title("Control Moment vs time")
+ax1.legend(loc='right')
+ax1.grid(True)
+
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+"""
 for i, t in enumerate(ts):
     q_sat_hist[i] = q_sat.value.reshape(4)
 
@@ -254,10 +300,6 @@ for i, t in enumerate(ts):
     total_wh_h0 = wh1.Hwh_body(
         sat_w) + wh2.Hwh_body(sat_w) + wh3.Hwh_body(sat_w)
 
-    # total_wh_h0 = (wh1.Hwh_body(sat_w) + (Lwh_b*wh1.wl_unit)*dt) + \
-    # (wh2.Hwh_body(sat_w) + (Lwh_b*wh2.wl_unit)*dt) + \
-    # (wh3.Hwh_body(sat_w) + (Lwh_b*wh3.wl_unit)*dt)
-
     sat_h = (JB@sat_w) + total_wh_h0
 
     # EOM of sat
@@ -266,13 +308,14 @@ for i, t in enumerate(ts):
     sat_w = sat_w + sat_w_dot*dt
 
     # Dynamics of Quaternion
-    q_sat_dot = 0.5*Quaternion.eps(q_sat) @ sat_w
+    q_sat_dot = q_sat.kinamatics(sat_w)
 
     q_sat = q_sat.value + q_sat_dot*dt
-    q_sat = Quaternion(q_sat[0], q_sat[1], q_sat[2], q_sat[3])
+    q_sat = Quaternion(
+        np.array([q_sat[0], q_sat[1], q_sat[2], q_sat[3]]).reshape(4, 1))
 
     q_error = q_sat.cross(q_c.inverse())
-
+"""
 
 print("done")
 

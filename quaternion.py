@@ -5,7 +5,7 @@ class Quaternion:
 
     # A 4x1 numpy array where q = [vector, scalor]
     def __init__(self, q):
-        if new_value.shape == (4, 1):
+        if q.shape == (4, 1):
             self._q = q
         else:
             raise ValueError("Quaternion shape must be (4,1)")
@@ -69,11 +69,20 @@ class Quaternion:
     def q4(self, new_value):
         self._q[3][0] = new_value
 
-    def norm(slef):
+    def __str__(self):
+        return str(self.value.flatten())
+
+    def __repr__(self):
+        return
+
+    def norm(self):
         return np.linalg.norm(self.value)
 
+    def normalized(self):
+        return Quaternion(self.value/np.linalg.norm(self.value))
+
     def conjugate(self):
-        return Quaternion()
+        return Quaternion(np.array([-self.q1, -self.q2, -self.q3, self.q4]).reshape(4, 1))
 
     def inverse(self):
         q_mag = self.norm()
@@ -114,8 +123,11 @@ class Quaternion:
 
     def cross(self, q2):
         result = np.block([Quaternion.phi(self), self.value]) @ q2.value
-        return Quaternion(result[0], result[1], result[2], result[3])
+        return Quaternion(np.array([result[0], result[1], result[2], result[3]]).reshape(4, 1))
 
     def dot(self, q2):
         result = np.block([Quaternion.eps(self), self.value]) @ q2.value
-        return Quaternion(result[0], result[1], result[2], result[3])
+        return Quaternion(np.array([result[0], result[1], result[2], result[3]]).reshape(4, 1))
+
+    def kinamatics(self, w):
+        return Quaternion(0.5*Quaternion.eps(self) @ w)

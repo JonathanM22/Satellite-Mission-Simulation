@@ -204,7 +204,7 @@ departure_date = Time("2026-10-19")
 sat = Spacecraft(SAT_MASS, departure_date, label="sat", color="purple")
 
 '''
-STEP 1
+---------------------------------------------------------------------------------------------------------------STEP 1--------------=------------------------------------------------------------------------------------------------
 
 Start with Lambert's problem with R1/R2/TOF.  Pull R1 and R2 from and ephemeris file for Earth and Mars.
 Iterate on Lambert's problem until you have chosen a solution that you are happy with (e.g. minimum C3 and arrival Vinfinity at Mars).
@@ -417,7 +417,8 @@ def find_optimal_solution(results, weight_C3, weight_Vinf):
 
 # outputs array of optimal C3 & Vinf arrival based on assigned weights ( user defined )
 optimal_solution = find_optimal_solution(results, weight_C3=0.75, weight_Vinf=0.25)
-
+C3 = optimal_solution[0]
+Vinf_arrival = optimal_solution[1]
 '''
 at this point I can differ my approach. 
 1. min good balance between c3 and vinf arrival --> convert to raan/dec/inclination for launch window --> continue with what Dr Ozimek suggested
@@ -427,11 +428,23 @@ at this point I can differ my approach.
            B-plane targetting
 '''
 
-'''
-Step 2: Converting Vinf to RAAN/DEC/Inclination
-'''
+# -------------------------------------------------------------------------------------------Step 2: Converting Vinf to RAAN/DEC/Inclination-------------------------------------------------------------------------------------------
+
 
 # to get declination and RAAN from vinf vector, we need the velocity to be in the ECI frame --> alr is 
+
+'''
+
+Calculate lambert soln to get estimated C3, vinf arrival, RAAN, & dec
+    --> Define arbritrary earth parking orbit 
+    --> Parking orbit --> ECI frame pos and vel
+    --> apply delta v to find v inf vector dept (C3)
+    --> calculate Raan and v3 from vinf vector 
+    --> create error vector between lamberts and parking orbit
+    --> finite difference jacobian to adjust parking orbit elements to minimize error vector
+    --> repeat, then propogate the final rsat_0 and vsat_0 with the nbody propagator using the rk4 funciton 
+    --> gonna miss mars, but will implement differential correction for b plane targetting later
+'''
 
 def vinf_to_raan_dec(Vinf): 
 
@@ -444,8 +457,55 @@ def vinf_to_raan_dec(Vinf):
 RAAN_dep, Dec_dep = vinf_to_raan_dec(optimal_solution[1]) 
 print(f'Outbound RAAN = {np.degrees(RAAN_dep): .3f}° | Outbound Declination = {np.degrees(Dec_dep): .3f}°\n')
 
+Earth_rad = 6378 #km
 
-# Gonna pause here and try to do n-body correction
+#  this is where I'd loop through different initial true anomalies to find where to best apply dv maybe
+
+# Define Earth Parking Orbit
+earth_parking = Orbit(mu=EARTH_MU, a=(200+Earth_rad)*u.km, e=0.0*u.km/u.km, f0=(0*u.rad), inc=(28.5*u.deg).to(u.rad),raan=(RAAN_dep*u.deg).to(u.rad),aop=(0*u.deg).to(u.rad))
+earth_parking.p = earth_parking.calc_p(earth_parking.a, earth_parking.e)
+earth_parking.energy = earth_parking.calc_energy( earth_parking.a, earth_parking.mu)
+sat_orbit = earth_parking
+# Getting intial position & vel. This r is wrt to the central body: earth
+r = sat_orbit.r_at_true_anomaly(sat_orbit.e, sat_orbit.p, sat_orbit.f0)
+# Converts the orbital elements from the orbital frame to the perifocal frame
+r_pqw, v_pqw = orb_2_pqw(r.value, sat_orbit.f0.value, sat_orbit.e.value, sat_orbit.p.value, sat_orbit.mu.value)
+# converts perifocal frame to eci frame
+r_eci, v_eci = perif_2_eci(r_pqw, v_pqw, sat_orbit.inc.value,sat_orbit.raan.value, sat_orbit.aop.value)
+sat.r0 = r_eci * u.km
+sat.v0 = v_eci * (u.km/u.s)
+
+# delta V that has to get applied to the satellite 
+# Dv = V,p_hyp - V_ECI (in LEO)
+
+hyperbolic_energy = C3/2 
+v_p_hyp = np.sqrt(2*(hyperbolic_energy + EARTH_MU/np.linalg.norm(sat.r0.value))) # --> velocity needed at perigee of the hyperbolic escape trajectory. this velocity is wrt Earth
+delta_V = v_p_hyp - np.linalg.norm(sat.v0.value) # --> required deltaV to get vinf. 
+print(f'Required Delta V to achieve a Vinf of {C3:.3f} at departure is {delta_V:.3f} km/s\n)')
+
+# direction of delta V --> tangential to orbit --> same direction as v eci
+v_hat = v_eci / np.linalg.norm(v_eci) 
+
+# this is essesntially the same tranfer_v1 from lamberts but just in the eci frame now. since from v_p_hyp and v_eci were both earth centered
+v_post_deltaV = v_eci + (delta_V * v_hat) # --> this velocity is also WRT and is the new departure velcocity after dv is applied
+
+# from here, we can calculate what v_inf departure is, ie C3
+v_inf_departure = v_post_deltaV - v1_earth # --> this is the vinf in the eci framee
+C3_parking = np.linalg.norm(v_inf_departure)**2
+# here is where I'm a little confused since here, the v_psot_deltaV is WRT earth. Previously when calculating vinf from lamberts, the transfer_v1 was wrt sun.
+
+RAAN_parking_dep, Dec_parking_dep = vinf_to_raan_dec(v_inf_departure) 
+
+error = np.array([
+    C3_parking - C3,
+    RAAN_parking_dep - RAAN_dep,
+    Dec_parking_dep - Dec_dep
+])
+
+# here is where i plan on implenetning fintie difference jacobinan to adjust parking orbit orb elements --> change when delta V is applied and such
+
+
+# ------------------------------------------------------------------------------------------Gonna pause here and try to do n-body correction---------------------------------------------------------------------------------------------
 
 central_body = sun
 bodies = [mercury,venus,jupiter,saturn,uranus,neptune]
@@ -459,3 +519,6 @@ r_mars_miss = r_sats[-1] - r2_mars
 print(f'Satellite Missed Mars Target by {np.linalg.norm(r_mars_miss):.5f} km')
 
 # --> work on diff eq corrector
+
+# thinking of doing newton raphson with f and g functions --> propagate v(_,_,_) = 0 --> proceed normally
+

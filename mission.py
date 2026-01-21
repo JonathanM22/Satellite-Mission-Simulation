@@ -31,9 +31,6 @@ Functions
 
 # Sets up single Runge Kutta 4 Step
 def RK4_single_step(fun, dt, t0, y0, fun_arg: list):
-
-    # evaluates inputted function, fun, at t0, y0, and inputted args to create 4 constants to solve 1 rk4 step
-    # inputted function name --> y_dot_n_ephemeris
     k1 = fun(t0, y0, fun_arg)
     k2 = fun((t0 + (dt/2)), (y0 + ((dt.value/2)*k1)), fun_arg)
     k3 = fun((t0 + (dt/2)), (y0 + ((dt.value/2)*k2)), fun_arg)
@@ -99,7 +96,7 @@ def y_dot_n_ephemeris(t, y, fun_arg: list):
         a_k = ((body.mu)/(r_sk_mag**3)) * r_sk
         # print(f'Accel from {body.label}: {a_k}')
 
-        # acceleration on CB due to kth body 
+        # acceleration on CB due to kth body
         a_cb_k = ((body.mu)/(np.linalg.norm(r_ck)**3)) * r_ck
 
         # if r and v were wrt to barycenter, we would just have a = a + a_k ( a_cb_k term only arises since we are wrt central body, which is also being accelerated by other bodies)
@@ -243,7 +240,7 @@ ys[0] = y0
 ts[0] = t0
 fun_arg = [central_body, bodies]
 
-# ys array holds the position & velocity of the sat wrt central body at each time step: know this since our initial condition r0, v0 are wrt central body 
+# ys array holds the position & velocity of the sat wrt central body at each time step: know this since our initial condition r0, v0 are wrt central body
 # we also set up our force/acceleration model to be wrt central body --> hence the consistency
 _, _, ys = propagate_rk4(sat.r0.value, sat.v0.value, t0, tf, dt, fun_arg)
 propagation_time_1 = time.perf_counter() - propagation_start_timer_1
@@ -309,7 +306,7 @@ n_steps_2 = len(ts)
 
 # Solve Lamberts
 
-# here, we want the position of the sat wrt to the sun at departure and arrival. The current is still in the barycentric frame, which later gets added to CB again to become barycenteric?? 
+# here, we want the position of the sat wrt to the sun at departure and arrival. The current is still in the barycentric frame, which later gets added to CB again to become barycenteric??
 
 """""
 # have to be consistent with what frame of reference your r1 and r2 are in.
@@ -323,12 +320,14 @@ r2_lambert = get_body_barycentric( mars.label, arrival_date).xyz.to(u.km).value
 """""
 
 # this correctly calculates r1 -> vector from central body to sat at departure: r = r_s - r_c
-r1_lambert = sat.r_ar[-1] - get_body_barycentric(central_body.label,t0).xyz.to(u.km).value
+r1_lambert = sat.r_ar[-1] - \
+    get_body_barycentric(central_body.label, t0).xyz.to(u.km).value
 # correctly calculates r2 --> vector from central body to mars at arrival: r = r_s - r_c = r_mars - r_sun
-r2_lambert = get_body_barycentric( mars.label, arrival_date).xyz.to(u.km).value - get_body_barycentric(central_body.label,arrival_date).xyz.to(u.km).value 
+r2_lambert = get_body_barycentric(mars.label, arrival_date).xyz.to(
+    u.km).value - get_body_barycentric(central_body.label, arrival_date).xyz.to(u.km).value
 
 
-# COMMENTING FOR TRIAL 
+# COMMENTING FOR TRIAL
 mars_miss = r2_lambert
 
 # Uncomment if you have already a solved value
@@ -341,7 +340,8 @@ r2_lambert = [-2.47641275e+08, -1.35238790e+07, -
 
 while (np.linalg.norm(mars_miss) > mars_parking.a.value):
 
-    a, p, e, tranfer_v1, tranfer_v2 = universal_lambert( r1_lambert, r2_lambert, tof.sec, tranfer_orbit.mu.value, desired_path='long')
+    a, p, e, tranfer_v1, tranfer_v2 = universal_lambert(
+        r1_lambert, r2_lambert, tof.sec, tranfer_orbit.mu.value, desired_path='long')
     tranfer_orbit.a = a * u.km
     tranfer_orbit.e = e * u.km/u.km
     tranfer_orbit.p = p * u.km
@@ -356,7 +356,9 @@ while (np.linalg.norm(mars_miss) > mars_parking.a.value):
     # dv1 = tranfer_v1 - sat.v_ar[-1]
 
     # dv1 = transfer v1 - sat velocity relative to central body: transfer v1 - (sat velocity relative to barycenter - central body velocity relative to barycenter)
-    dv1 = tranfer_v1 - (sat.v_ar[-1] - get_body_barycentric(central_body.label, t0).xyz.to(u.km).value)
+    dv1 = tranfer_v1 - \
+        (sat.v_ar[-1] - get_body_barycentric(central_body.label,
+         t0).xyz.to(u.km).value)
     v0 = tranfer_v1
     y0 = np.concatenate((r0, v0))
 
@@ -368,7 +370,7 @@ while (np.linalg.norm(mars_miss) > mars_parking.a.value):
     step = 1
     for i in range(len(ts) - 1):
         ys[step] = RK4_single_step(
-             y_dot_n_ephemeris, dt, ts[step-1], ys[step-1], fun_arg=fun_arg)
+            y_dot_n_ephemeris, dt, ts[step-1], ys[step-1], fun_arg=fun_arg)
     step += 1
 
     # r, v, ys = propagate_rk4(sat.r0.value, sat.v0.value, t0, tf, dt, fun_arg)
@@ -383,7 +385,7 @@ while (np.linalg.norm(mars_miss) > mars_parking.a.value):
 
     for i, t in enumerate(ts):
         r, v = get_body_barycentric_posvel(
-        central_body.label, t)
+            central_body.label, t)
 
         central_body.r_ar[i] = r.xyz.to(u.km)
         central_body.v_ar[i] = v.xyz.to(u.km/u.s)

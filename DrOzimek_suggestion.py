@@ -452,8 +452,8 @@ bodies = [mercury,venus,jupiter,saturn,uranus,neptune]
 fun_arg = [central_body,bodies]
 
 # _, _, ys = propagate_rk4(sat.r0.value, sat.v0.value, t0, tf, dt, fun_arg)
-dt = TimeDelta(60, format='sec')
-r_sats, v_sats, ys_sats = propagate_rk4(r1_earth, transfer_v1, departure_date, arrival_date, dt, fun_arg=fun_arg)
+dt = TimeDelta(3600, format='sec')
+r_sats, _, _ = propagate_rk4(r1_earth, transfer_v1, departure_date, arrival_date, dt, fun_arg=fun_arg)
 
 r_mars_miss = r_sats[-1] - r2_mars
 print(f'Satellite Missed Mars Target by {np.linalg.norm(r_mars_miss):.5f} km')

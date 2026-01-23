@@ -73,7 +73,7 @@ class Quaternion:
         return str(self.value.flatten())
 
     def __repr__(self):
-        return
+        return str(self.value.flatten())
 
     def norm(self):
         return np.linalg.norm(self.value)

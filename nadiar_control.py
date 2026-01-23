@@ -61,8 +61,10 @@ def euler_321(psi, theta, phi):
                     [A21, A22, A23],
                     [A31, A32, A33])
 
-# phi_1, theta_2, psi_3
-def euler321_to_quat(psi, theta, phi):
+# phi_3, theta_2, psi_1
+
+
+def euler321_to_quat(phi, theta, psi):
     # Appendix B: 3-2-1 -> quaternion
     q1 = np.cos(phi/2)*np.cos(theta/2)*np.sin(psi/2) - \
         np.sin(phi/2)*np.sin(theta/2)*np.cos(psi/2)
@@ -76,16 +78,17 @@ def euler321_to_quat(psi, theta, phi):
     q4 = np.cos(phi/2)*np.cos(theta/2)*np.cos(psi/2) + \
         np.sin(phi/2)*np.sin(theta/2)*np.sin(psi/2)
 
-    return Quaternion(np.array([q1, q2, q3, q4]).reshape(4, 1))
+    return Quaternion(np.array([q1, q2, q3, q4]).reshape(4, 1)).normalized()
+
 
 def quat_to_attitude(q):
 
     q1, q2, q3, q4 = q.q1, q.q2, q.q3, q.q4
 
     A11 = (q1**2) - (q2**2) - (q3**2) + (q4**2)
-    A12 = 2*(q1*q2 + q3*q4) 
-    A13 = 2*(q1*q3 - q2*q4) 
-    A21 = 2*(q2*q1 + q3*q4) 
+    A12 = 2*(q1*q2 + q3*q4)
+    A13 = 2*(q1*q3 - q2*q4)
+    A21 = 2*(q2*q1 - q3*q4)
     A22 = -(q1**2) + (q2**2) - (q3**2) + (q4**2)
     A23 = 2*(q2*q3 + q1*q4)
     A31 = 2*(q3*q1 + q2*q4)
@@ -98,21 +101,65 @@ def quat_to_attitude(q):
         [A31, A32, A33],
     ])
 
-#https://en.wikiversity.org/wiki/PlanetPhysics/Direction_Cosine_Matrix_to_Euler_321_Angles
+# https://en.wikiversity.org/wiki/PlanetPhysics/Direction_Cosine_Matrix_to_Euler_321_Angles
 # phi_1, theta_2, psi_3
+
+
 def attitude_to_euler321(attitude):
-    A11 = attitude[0][1]
+    A11 = attitude[0][0]
     A12 = attitude[0][1]
     A13 = attitude[0][2]
     A23 = attitude[1][2]
     A33 = attitude[2][2]
-    
 
     theta = np.arccos(A13)
     phi = np.arctan(A12/A11)
     psi = np.arctan(A23, A33)
 
     return np.array([theta, phi, psi])
+
+# Sarabandi, Soheil & Thomas, Federico. (2018). A Survey on the Computation of Quaternions From Rotation Matrices. Journal of Mechanisms and Robotics. 11. 10.1115/1 4041889.
+
+
+def cayley_method(attitude):
+    A11 = attitude[0][0]
+    A12 = attitude[0][1]
+    A13 = attitude[0][2]
+    A21 = attitude[1][0]
+    A22 = attitude[1][1]
+    A23 = attitude[1][2]
+    A31 = attitude[2][0]
+    A32 = attitude[2][1]
+    A33 = attitude[2][2]
+
+    q4 = 0.25*np.sqrt((A11+A22+A33+1)**2 + (A32-A23) **
+                      2 + (A13-A31)**2 + (A21-A12)**2)
+
+    q1 = 0.25*np.sqrt((A32-A23)**2 + (A11-A22-A33+1) **
+                      2 + (A21+A12)**2 + (A31+A13)**2)
+
+    q2 = 0.25*np.sqrt((A13-A31)**2 + (A21+A12)**2 +
+                      (A22-A11-A33+1)**2 + (A32+A23)**2)
+
+    q3 = 0.25*np.sqrt((A21-A12)**2 + (A31+A13)**2 +
+                      (A32+A23)**2 + (A33-A11-A22+1)**2)
+
+    # if np.sign(q1) != np.sign((A32-A23)):
+    #     q1 *= -1
+
+    q1 = np.copysign(q1, (A32-A23))
+
+    # if np.sign(q2) != np.sign((A13-A31)):
+    #     q2 *= -1
+
+    q2 = np.copysign(q2, (A13-A31))
+
+    # if np.sign(q3) != np.sign((A21-A12)):
+    #     q3 *= -1
+
+    q3 = np.copysign(q3, (A21-A12))
+
+    return Quaternion(np.array([q1, q2, q3, q4]).reshape(4, 1))
 
 
 class ReactionWh:
@@ -168,12 +215,8 @@ O1 = -r/np.linalg.norm(r)
 O2 = -np.cross(r, v)/np.linalg.norm(np.cross(r, v))
 O3 = np.cross(O1, O2)
 
-# def LVLH(r,v)
-#     O1 = -r/np.linalg.norm(r)
-#     O2 = -np.cross(r, v)/np.linalg.norm(np.cross(r, v))
-#     O3 = np.cross(O1, O2)
+lvlh_attitude = np.stack([O1, O2, O3], axis=1)
 
-#     np.block
 
 # Define Reaction wheels
 wh1 = ReactionWh(1, 3, 6, np.array([1, 0, 0]).reshape(3, 1))
@@ -201,22 +244,25 @@ sat_w_hist = np.zeros((n_steps, 3))
 L_hist = np.zeros((n_steps, 3))
 
 # Commanded sat position
-psi_c = 30
-theat_c = 45
-phi_c = 60
+phi_c = 10
+theat_c = 1
+psi_c = 6
 q_c = euler321_to_quat(np.deg2rad(
-    psi_c), np.deg2rad(theat_c), np.deg2rad(phi_c))
+    phi_c), np.deg2rad(theat_c), np.deg2rad(psi_c))
 
 # intial sat position
-psi0 = 60
+phi0 = 60
 theat0 = 45
-phi0 = 30
+psi0 = 30
 q_sat0 = euler321_to_quat(np.deg2rad(
-    psi0), np.deg2rad(theat0), np.deg2rad(phi0))
+    phi0), np.deg2rad(theat0), np.deg2rad(psi0))
 
 # sat_w = angular momentum of body relative to inertial in body frame
 sat_w0 = np.array([3, -7, 2]).reshape(3, 1)
 
+R = quat_to_attitude(q_sat0)
+Rq = cayley_method(R)
+RqA = quat_to_attitude(Rq)
 
 y0 = np.concatenate([q_sat0.value.flatten(), sat_w0.flatten()])
 
@@ -225,7 +271,6 @@ ts[0] = t0
 
 
 def y_dot_gnc(t, y, fun_arg: list):
-
     q_sat = Quaternion(y[0:4].reshape(4, 1))
     q_sat = q_sat.normalized()
     sat_w = y[4:].reshape(3, 1)
@@ -243,7 +288,6 @@ def y_dot_gnc(t, y, fun_arg: list):
 
 
 for i in range(n_steps-1):
-
     # For calcs
     q_sat = Quaternion(ys[i][0:4].reshape(4, 1))
     q_sat = q_sat.normalized()
@@ -262,8 +306,8 @@ for i in range(n_steps-1):
     q_error_hist[i] = q_error.value.flatten()
     L_hist[i] = Lwh_b.flatten()
 
-# For plotting
-q_sat_hist[i+1] = ys[i][0:4].flatten()
-sat_w_hist[i+1] = ys[i][4:].flatten()
-q_error_hist[i+1] = q_error.value.flatten()
-L_hist[i+1] = Lwh_b.flatten()
+    # For plotting
+    q_sat_hist[i+1] = ys[i][0:4].flatten()
+    sat_w_hist[i+1] = ys[i][4:].flatten()
+    q_error_hist[i+1] = q_error.value.flatten()
+    L_hist[i+1] = Lwh_b.flatten()

@@ -24,8 +24,10 @@ q_error_hist = data["q_error_hist"]
 L_hist = data["L_hist"]
 lvlh_attitude_hist = data["lvlh_attitude_hist"]
 
-plot_error = False
+plot_error = True
 if plot_error:
+    sti = 0
+    eni = -1
     """PLOT Q_ERROR"""
     print(len(q_error_hist))
     fig, ax = plt.subplots(3, 1, figsize=(10, 7), sharex=True)
@@ -168,7 +170,7 @@ ax_L = fig.add_subplot(gs[2, 0])
 # Right column: 3D animation
 ax_3d = fig.add_subplot(gs[:, 1], projection='3d')  # spans all 3 rows
 
-plot_vid = True
+plot_vid = False
 if plot_vid:
     plt.rcParams['animation.ffmpeg_path'] = r"C:\Users\jonam\Desktop\Aero-Project\ffmpeg-master-latest-win64-gpl\ffmpeg-master-latest-win64-gpl\bin\ffmpeg.exe"
 

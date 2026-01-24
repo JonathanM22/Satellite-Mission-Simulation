@@ -73,7 +73,7 @@ class Quaternion:
         return str(self.value.flatten())
 
     def __repr__(self):
-        return str(self.value.flatten())
+        return str(f"Quaternion Object: {self.value.flatten()}")
 
     def norm(self):
         return np.linalg.norm(self.value)
@@ -119,6 +119,90 @@ class Quaternion:
             [q3,  q4,  -q1],
             [-q2, q1,  q4],
             [-q1, -q2, -q3]
+        ])
+
+    # CHATGPT MADE THIS
+    @staticmethod
+    def from_attitude(A):
+        trA = np.trace(A)
+
+        # Candidates are 4 * qi * q  (book Eq. 2.135 style)
+        v1 = np.array([
+            1 + 2*A[0, 0] - trA,
+            A[0, 1] + A[1, 0],
+            A[0, 2] + A[2, 0],
+            A[1, 2] - A[2, 1]
+        ])
+
+        v2 = np.array([
+            A[1, 0] + A[0, 1],
+            1 + 2*A[1, 1] - trA,
+            A[1, 2] + A[2, 1],
+            A[2, 0] - A[0, 2]
+        ])
+
+        v3 = np.array([
+            A[2, 0] + A[0, 2],
+            A[2, 1] + A[1, 2],
+            1 + 2*A[2, 2] - trA,
+            A[0, 1] - A[1, 0]
+        ])
+
+        v4 = np.array([
+            A[1, 2] - A[2, 1],
+            A[2, 0] - A[0, 2],
+            A[0, 1] - A[1, 0],
+            1 + trA
+        ])
+
+        candidates = np.vstack([v1, v2, v3, v4])  # shape (4,4)
+
+        # Pick the candidate with largest norm (best numerical conditioning)
+        idx = np.argmax(np.linalg.norm(candidates, axis=1))
+        q = candidates[idx] / np.linalg.norm(candidates[idx])
+
+        # Optional: enforce "positive scalar part" convention for consistency
+        if q[3] < 0:
+            q = -q
+
+        return Quaternion(q.reshape(4, 1))
+
+    @staticmethod
+    def from_euler321(phi, theta, psi):
+        # Appendix B: 3-2-1 -> quaternion
+        # phi_3, theta_2, psi_1
+        q1 = np.cos(phi/2)*np.cos(theta/2)*np.sin(psi/2) - \
+            np.sin(phi/2)*np.sin(theta/2)*np.cos(psi/2)
+
+        q2 = np.cos(phi/2)*np.sin(theta/2)*np.cos(psi/2) + \
+            np.sin(phi/2)*np.cos(theta/2)*np.sin(psi/2)
+
+        q3 = np.sin(phi/2)*np.cos(theta/2)*np.cos(psi/2) - \
+            np.cos(phi/2)*np.sin(theta/2)*np.sin(psi/2)
+
+        q4 = np.cos(phi/2)*np.cos(theta/2)*np.cos(psi/2) + \
+            np.sin(phi/2)*np.sin(theta/2)*np.sin(psi/2)
+
+        return Quaternion(np.array([q1, q2, q3, q4]).reshape(4, 1)).normalized()
+
+    def to_attitude(self):
+
+        q1, q2, q3, q4 = self.q1, self.q2, self.q3, self.q4
+
+        A11 = (q1**2) - (q2**2) - (q3**2) + (q4**2)
+        A12 = 2*(q1*q2 + q3*q4)
+        A13 = 2*(q1*q3 - q2*q4)
+        A21 = 2*(q2*q1 - q3*q4)
+        A22 = -(q1**2) + (q2**2) - (q3**2) + (q4**2)
+        A23 = 2*(q2*q3 + q1*q4)
+        A31 = 2*(q3*q1 + q2*q4)
+        A32 = 2*(q3*q2 - q1*q4)
+        A33 = -(q1**2) - (q2**2) + (q3**2) + (q4**2)
+
+        return np.array([
+            [A11, A12, A13],
+            [A21, A22, A23],
+            [A31, A32, A33],
         ])
 
     def cross(self, q2):

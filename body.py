@@ -24,6 +24,7 @@ class Body:
         self.t_ar = np.zeros(3)  # time array
         self.energy_ar = np.zeros(1)
         self.h_ar = np.zeros(1)
+        self.mu = 0
 
         # Atr mostly for plotting
         self.label = label
@@ -77,14 +78,22 @@ SOLAR_SYS_MU = SOLAR_SYS_MASS * G
 # Intialize bodies
 epoch = Time("2026-11-08")
 solar_system_ephemeris.set('de432s')
-
 sun = Body(SUN_MASS, epoch, celestial_body='sun', color="yellow")
 earth = Body(EARTH_MASS, epoch, celestial_body="earth", color="green")
+earth.mu = G.value * earth.mass
 moon = Body(MOON_MASS, epoch, celestial_body="moon", color='grey')
+moon.mu = G.value * moon.mass
 mars = Body(MARS_MASS, epoch, celestial_body="mars", color="red")
+mars.mu = G.value * mars.mass
 jupiter = Body(JUPITER_MASS, epoch, celestial_body="jupiter", color="orange")
+jupiter.mu = G.value * jupiter.mass
 saturn = Body(SATURN_MASS, epoch, celestial_body="saturn", color="yellow")
+saturn.mu = G.value * saturn.mass
 uranus = Body(URANAS_MASS, epoch, celestial_body="uranus", color="cyan")
+uranus.mu = G.value * uranus.mass
 neptune = Body(NEPTUNE_MASS, epoch, celestial_body="neptune", color="cyan")
+neptune.mu = G.value * neptune.mass
 mercury = Body(MERCURY_MASS, epoch, celestial_body="mercury", color="cyan")
+mercury.mu = G.value * mercury.mass
 venus = Body(VENUS_MASS, epoch, celestial_body="venus", color="cyan")
+venus.mu = G.value * venus.mass

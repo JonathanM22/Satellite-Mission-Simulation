@@ -77,7 +77,7 @@ if plot_leg_1:
                              :] - earth.r_ar[start_index:end_index:step, :]
 
     n_frames = len(sat_wrt_earth)
-    azim_angle = np.linspace(45, 180+45, n_frames)
+    azim_angle = np.linspace(0, 90, n_frames)
 
     metadata = dict(title='Leg1Ani', artist='jonamat03@gmail.com')
     writer = FFMpegWriter(fps=fps, metadata=metadata)

@@ -123,15 +123,14 @@ sat.inertia = np.array([[40, 0, 0],
                         [0, 0, 60]
                         ])
 
-r = orbit_ys[0, 0:3]
-v = orbit_ys[0, 3:6]
 
-# Define LVLH frame
-O1 = -r/np.linalg.norm(r)
-O2 = -np.cross(r, v)/np.linalg.norm(np.cross(r, v))
-O3 = np.cross(O1, O2)
+def lvlh_frame(r, v):
+    # Define LVLH frame
+    O1 = -r/np.linalg.norm(r)
+    O2 = -np.cross(r, v)/np.linalg.norm(np.cross(r, v))
+    O3 = np.cross(O1, O2)
 
-lvlh_attitude = np.stack([O1, O2, O3], axis=1)
+    return lvlh_attitude = np.stack([O1, O2, O3], axis=1)
 
 
 # Define Reaction wheels
@@ -158,13 +157,6 @@ q_sat_hist = np.zeros((n_steps, 4))
 q_error_hist = np.zeros((n_steps, 4))
 sat_w_hist = np.zeros((n_steps, 3))
 L_hist = np.zeros((n_steps, 3))
-
-# Commanded sat position
-phi_c = 10
-theat_c = 1
-psi_c = 6
-q_c = Quaternion.from_euler321(np.deg2rad(
-    phi_c), np.deg2rad(theat_c), np.deg2rad(psi_c))
 
 # intial sat position
 phi0 = 60

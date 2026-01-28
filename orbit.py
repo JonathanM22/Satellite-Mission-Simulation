@@ -21,17 +21,20 @@ class Orbit:
         self.aop = aop
         self.mu = mu
         self.h = 0
-        self.p = 0
-        self.energy = 0
 
-    def r_at_true_anomaly(self, e, p, f):
-        return p / (1 + e*np.cos(f))
+    def r_at_true_anomaly(self, f, deg=False):
+        if deg == True:
+            f = np.deg2rad(f)
+        return self.p / (1 + self.e*np.cos(f))
 
-    def calc_energy(self, a, mu):
-        return (-mu) / (2*a)
+    @property
+    def energy(self):
+        return (-self.mu) / (2*self.a)
 
-    def calc_p(self, a, e):
-        return a * (1 - e**2)
+    @property
+    def p(self):
+        return self.a * (1 - self.e**2)
 
-    def period(self, a, mu):
-        return (2*np.pi)*np.sqrt(a**3/mu)
+    @property
+    def period(self):
+        return (2*np.pi)*np.sqrt(self.a**3/self.mu)

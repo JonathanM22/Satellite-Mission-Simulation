@@ -93,16 +93,16 @@ vinf_arr = np.array([-2.3053362,  0.75875929,  0.93366132])*(u.km/u.s)
 vinf_mag = np.linalg.norm(vinf_arr).to(u.km/u.s)
 vinf_raan, vinf_dec = v_to_raan_dec(vinf_arr)
 
-raan0 = 370
+raan0 = 371
 aop0 = 54
 x0 = np.array([raan0, aop0]).reshape(2, 1)
 y0 = sat_orbit_targeting(earth_parking, vinf_mag, x0)
-dt_raan = 10
-dt_aop = 10
+dt_raan = 45
+dt_aop = 180
 
 i = 0
 max_i = 20000
-tol = np.array([0.1, 0.1])
+tol = np.array([10e-6, 10e-6])
 y_d = np.array([vinf_raan.value, vinf_dec.value]).reshape(2, 1)
 x = x0
 error = y0 - y_d
@@ -116,7 +116,12 @@ while np.linalg.norm(error) > 0.1:
     f_xk = sat_orbit_targeting(earth_parking, vinf_mag, x_k)
     error = (f_xk-y_d)
 
-    print(f"[{i}] ERROR:{error.flatten()}")
+    dt = (x_k-x)*np.linalg.norm(error)
+
+    dt_raan = dt[0][0]
+    dt_aop = dt[1][0]
+
+    print(f"[{i}] ERROR:{error.flatten()}| DT: {dt.flatten()}")
 
     x = x_k
     i += 1
@@ -125,12 +130,14 @@ while np.linalg.norm(error) > 0.1:
         break
 
 if np.linalg.norm(error) < 0.1:
+    print(f"===========================================")
     print(f"[TOL SATISFIED] ERROR:{error.flatten()}")
 else:
+    print(f"===========================================")
     print(f"[TOL NOT SATISFIED] ERROR:{error.flatten()}")
 
 f_x = sat_orbit_targeting(earth_parking, vinf_mag, x)
 error = (f_x-y_d)
-print(f"x: earth.raan = {x[0][0]}, earth.aop = {x[1][0]}")
-print(f"SatVel@f| raan: {f_x[0][0]} rad | dec: {f_x[1][0]} rad")
-print(f"V_inf| raan: {y_d[0][0]} rad | dec: {y_d[1][0]} rad")
+print(f"x | earth.raan = {x[0][0]}, earth.aop = {x[1][0]}")
+print(f"SatVel@f | raan: {f_x[0][0]} rad | dec: {f_x[1][0]} rad")
+print(f"V_inf | raan: {y_d[0][0]} rad | dec: {y_d[1][0]} rad")

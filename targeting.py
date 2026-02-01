@@ -112,7 +112,7 @@ while np.linalg.norm(error) > 0.1:
     f_x = sat_orbit_targeting(earth_parking, vinf_mag, x)
     J = sensitivity_matrix(earth_parking, vinf_mag, x, dt_raan, dt_aop)
 
-    x_k = x - J@(f_x-y_d)
+    x_k = x - np.linalg.inv(J)@(f_x-y_d)
     f_xk = sat_orbit_targeting(earth_parking, vinf_mag, x_k)
     error = (f_xk-y_d)
 

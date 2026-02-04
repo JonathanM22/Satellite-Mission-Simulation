@@ -93,22 +93,21 @@ vinf_arr = np.array([-2.3053362,  0.75875929,  0.93366132])*(u.km/u.s)
 vinf_mag = np.linalg.norm(vinf_arr).to(u.km/u.s)
 vinf_raan, vinf_dec = v_to_raan_dec(vinf_arr)
 
-raan0 = 371
-aop0 = 54
+raan0 = 175
+aop0 = 240
 x0 = np.array([raan0, aop0]).reshape(2, 1)
 y0 = sat_orbit_targeting(earth_parking, vinf_mag, x0)
-dt_raan = 45
-dt_aop = 180
+dt_raan = np.deg2rad(45)
+dt_aop = np.deg2rad(180)
 
 i = 0
 max_i = 20000
-tol = np.array([10e-6, 10e-6])
 y_d = np.array([vinf_raan.value, vinf_dec.value]).reshape(2, 1)
 x = x0
+tol = np.array([10e-6, 10e-6]).reshape(2, 1)
 error = y0 - y_d
 
-while np.linalg.norm(error) > 0.1:
-
+while np.any(np.abs(error) > tol):
     f_x = sat_orbit_targeting(earth_parking, vinf_mag, x)
     J = sensitivity_matrix(earth_parking, vinf_mag, x, dt_raan, dt_aop)
 

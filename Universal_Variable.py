@@ -303,7 +303,7 @@ def universal_lambert(r1_vec, r2_vec, TOF, mu, desired_path='short'):
     a = - mu / (2 * (.5*np.linalg.norm(v1_vec)**2 - (mu/r1)))
     p = a*(1-e**2)
 
-    return a, p, e, v1_vec, v2_vec
+    return a, e, v1_vec, v2_vec
 
     # return v1_vec, v2_vec, B, chi, psi, SMA
 # --------------------------------------------------------------------------------------------------------------------

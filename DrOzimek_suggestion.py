@@ -300,10 +300,10 @@ for tof_days in tof_range:
     # print(f"Departure velocity: {v1_short} | Arrival velocity: {v2_short}\n")
 
     # print("VRAJ FUNCTION") -> Universal Lambert Formulation
-    transfer_short.a, transfer_short.p, transfer_short.e, transfer_v1_short, transfer_v2_short = universal_lambert( r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path= 'short')
+    transfer_short.a, transfer_short.e, transfer_v1_short, transfer_v2_short = universal_lambert( r1_earth, r2_mars, (tof.sec), transfer_short.mu, desired_path= 'short')
     # print(f'Short Transfer semi major axis is {transfer_short.a} km -->  {(transfer_short.a/149597870.7)} AU | Eccentricity = {transfer_short.e} | Departure velocity: {transfer_v1} km/s | Arrival velocity: {transfer_v2} km/s\n')
     C3_short = np.linalg.norm(transfer_v1_short - v1_earth)**2  
-    transfer_long.a, transfer_long.p, transfer_long.e, transfer_v1_long, transfer_v2_long = universal_lambert( r1_earth, r2_mars, (tof.sec), transfer_long.mu, desired_path= 'long')
+    transfer_long.a, transfer_long.e, transfer_v1_long, transfer_v2_long = universal_lambert( r1_earth, r2_mars, (tof.sec), transfer_long.mu, desired_path= 'long')
     # print(f'Long Transfer semi major axis is {transfer_long.a} km -->  {(transfer_long.a/149597870.7)} AU | Eccentricity = {transfer_long.e} | Departure velocity: {transfer_v1} km/s | Arrival velocity: {transfer_v2} km/s\n')
     C3_long = np.linalg.norm(transfer_v1_long - v1_earth)**2
 
@@ -418,7 +418,7 @@ def find_optimal_solution(results, weight_C3, weight_Vinf):
 # outputs array of optimal C3 & Vinf arrival based on assigned weights ( user defined )
 optimal_solution = find_optimal_solution(results, weight_C3=0.75, weight_Vinf=0.25)
 C3 = optimal_solution[0]
-Vinf_arrival = optimal_solution[1]
+Vinf_arrival = optimal_solution[1]*(u.km/u.s)
 '''
 at this point I can differ my approach. 
 1. min good balance between c3 and vinf arrival --> convert to raan/dec/inclination for launch window --> continue with what Dr Ozimek suggested
@@ -449,7 +449,7 @@ def vinf_to_raan_dec(Vinf):
 
     Dec = np.arcsin(Vinf[2]/np.linalg.norm(Vinf))
     RAAN = np.arctan2(Vinf[1],Vinf[0])
-    print(f'RAAN: {np.degrees(RAAN): .3f}° | Declination: {np.degrees(Dec): .3f}°')
+    # print(f'RAAN: {np.degrees(RAAN): .3f}° | Declination: {np.degrees(Dec): .3f}°')
 
     return RAAN, Dec
 
@@ -592,7 +592,51 @@ print(f"V_inf | raan: {y_d[0][0]} rad | dec: {y_d[1][0]} rad")
 # r_mars_miss = r_sats[-1] - r2_mars
 # print(f'Satellite Missed Mars Target by {np.linalg.norm(r_mars_miss):.5f} km')
 
-# # --> work on diff eq corrector
+# # # --> work on diff eq corrector
 
-# # thinking of doing newton raphson with f and g functions --> iterate v(_,_,_) = 0 --> proceed normally
+# # # thinking of doing newton raphson with f and g functions --> iterate v(_,_,_) = 0 --> proceed normally
+
+'''
+# TLDR --> Satellite misses mars by 131768.52445 km
+# propagate the new satellite initial conditions after adjusting RAAN and AOP
+'''
+# this pos vector is wrt earth center
+r1_idealized = earth_parking.r_at_true_anomaly(earth_parking.f0).value
+r_pqw, _ = orb_2_pqw(r1_idealized,
+                            earth_parking.f0.value, earth_parking.e.value,
+                            earth_parking.p.value, earth_parking.mu.value)
+
+# converts perifocal frame to eci frame
+r_eci, _ = perif_2_eci(r_pqw, _, earth_parking.inc.value,
+                            earth_parking.raan.value,
+                            earth_parking.aop.value)
+                            
+
+# Your satellite's heliocentric position
+r1_sat_helio = r1_earth + r_eci  # Add Earth's position to your ECI position
+
+# for redundancy since we can reuse our vinf dept vector, we can just recalc the departure velocity after adjusting RAAN and AOP 
+
+def raan_dec_to_vinf(Vinf_mag, raan, dec):
+    
+    x = Vinf_mag*np.sin(np.pi/2-dec)*np.cos(raan)
+    y = Vinf_mag*np.sin(np.pi/2-dec)*np.sin(raan)
+    z = Vinf_mag*np.cos(np.pi/2-dec)
+    return np.array([x,y,z])
+
+Vinf_dept_idealized = raan_dec_to_vinf(Vinf_mag.value, x[0][0], x[1][0])
+Vinf_ECI = Vinf_dept_idealized   # departure hyperbolic excess velcity in the ECI frame
+
+central_body = sun
+bodies = [mercury,venus,jupiter,saturn,uranus,neptune]
+fun_arg = [central_body,bodies]
+
+# propagate with new initial conditions from parking orbit targeting
+
+# _, _, ys = propagate_rk4(sat.r0.value, sat.v0.value, t0, tf, dt, fun_arg)
+dt = TimeDelta(3600, format='sec')
+r_sats, _, _ = propagate_rk4(r1_sat_helio, Vinf_ECI, departure_date, arrival_date, dt, fun_arg=fun_arg)
+
+r_mars_miss = r_sats[-1] - r2_mars
+print(f'Satellite Missed Mars Target by {np.linalg.norm(r_mars_miss):.5f} km')
 

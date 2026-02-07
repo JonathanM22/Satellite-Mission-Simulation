@@ -395,30 +395,38 @@ def find_optimal_solution(results, weight_C3, weight_Vinf):
 
     # extracting C3 and Vinf arrival values
     C3_values = np.array([r['C3'] for r in results])
-    Vinf_values = np.array([r['Vinf_arrival'] for r in results])
-    Vinf_mag = np.linalg.norm(Vinf_values, axis=1)
+    Vinf_arrival_values = np.array([r['Vinf_arrival'] for r in results])
+    Vinf_arrival_mag = np.linalg.norm(Vinf_arrival_values, axis=1)
+    Vinf_departure_values = np.array([r['V_inf_dep'] for r in results])
+    Vinf_departure_mag = np.linalg.norm(Vinf_departure_values, axis=1)
+
 
     # tof_values = np.array([r['tof_days'] for r in results])
 
     # normalzing them to be between 0 and 1 
     C3_norm = (C3_values - np.min(C3_values)) / (np.max(C3_values) - np.min(C3_values))
-    Vinf_norm = (Vinf_mag - np.min(Vinf_mag)) / (np.max(Vinf_mag) - np.min(Vinf_mag))
+    Vinf_arrival_norm = (Vinf_arrival_mag - np.min(Vinf_arrival_mag)) / (np.max(Vinf_arrival_mag) - np.min(Vinf_arrival_mag))
 
     # give weighted scoe
-    score = (weight_C3 * C3_norm) + (weight_Vinf * Vinf_norm)
+    score = (weight_C3 * C3_norm) + (weight_Vinf * Vinf_arrival_norm)
     # minimize
     optimal_idx = np.argmin(score)
     optimal_C3 = C3_values[optimal_idx]
-    optimal_Vinf = Vinf_values[optimal_idx]
-    optimal_solution = [optimal_C3, optimal_Vinf]
-
-    print(f"\nOptimal Mission Duration: {results[optimal_idx]['tof_days']} Days. Arrival Date = {departure_date+results[optimal_idx]['tof_days']} with (C3: {optimal_solution[0]:.3f} km²/s², Vinf Arrival: {Vinf_mag[optimal_idx]:.3f}) km/s\n")
-    return optimal_solution
+    optimal_Vinf_arrival = Vinf_arrival_mag[optimal_idx]
+    optimal_Vinf_departure_mag = Vinf_departure_mag[optimal_idx]
+    optimal_solution = [optimal_C3, optimal_Vinf_arrival, optimal_Vinf_departure_mag]
+    optimal_Vinf_departure = Vinf_departure_values[optimal_idx]
+    print(f"\nOptimal Mission Duration: {results[optimal_idx]['tof_days']} Days. Arrival Date = {departure_date+results[optimal_idx]['tof_days']} with (C3: {optimal_solution[0]:.3f} km²/s², Vinf Arrival: {optimal_solution[1]:.3f} km/s, Vinf Departure: {optimal_Vinf_departure_mag:.3f} km/s)\n")
+    return optimal_solution, optimal_Vinf_departure
 
 # outputs array of optimal C3 & Vinf arrival based on assigned weights ( user defined )
-optimal_solution = find_optimal_solution(results, weight_C3=0.75, weight_Vinf=0.25)
+optimal_solution, optimal_Vinf_departure = find_optimal_solution(results, weight_C3=0.75, weight_Vinf=0.25)
 C3 = optimal_solution[0]
 Vinf_arrival = optimal_solution[1]*(u.km/u.s)
+Vinf_departure = optimal_Vinf_departure*(u.km/u.s)
+
+# All heliocentric position and velocity vectors are in the ecliptic frame, so we need to convert the vinf departure vector to the ECI frame to get the correct RAAN and declination for the parking orbit targeting
+
 '''
 at this point I can differ my approach. 
 1. min good balance between c3 and vinf arrival --> convert to raan/dec/inclination for launch window --> continue with what Dr Ozimek suggested
@@ -453,7 +461,19 @@ def vinf_to_raan_dec(Vinf):
 
     return RAAN, Dec
 
-RAAN_dep, Dec_dep = vinf_to_raan_dec(optimal_solution[1]) 
+
+# Convert V_infinity from ecliptic to ECI frame
+earth_tilt = np.deg2rad(23.43928)
+
+# Rotation matrix: ecliptic → ECI
+ecliptic_to_eci = np.array([
+    [1, 0, 0],
+    [0, np.cos(earth_tilt), np.sin(earth_tilt)],
+    [0, -np.sin(earth_tilt), np.cos(earth_tilt)]
+])
+
+Vinf_departure_eci = ecliptic_to_eci @ Vinf_departure
+RAAN_dep, Dec_dep = vinf_to_raan_dec(Vinf_departure_eci) 
 print(f'Outbound RAAN = {np.degrees(RAAN_dep): .3f}° | Outbound Declination = {np.degrees(Dec_dep): .3f}°\n')
 
 Earth_rad = 6378 #km
@@ -527,8 +547,9 @@ def sensitivity_matrix(orbit, v_inf_mag, x, dt_raan, dt_aop):
 
     return np.block([dt_raan_col, dt_aop_col])
 
-Vinf_mag = np.linalg.norm(Vinf_arrival).to(u.km/u.s)
-vinf_raan, vinf_dec = vinf_to_raan_dec(Vinf_arrival)
+
+Vinf_mag = np.linalg.norm(Vinf_departure.value)*(u.km/u.s)
+vinf_raan, vinf_dec = vinf_to_raan_dec(Vinf_departure.value)
 
 raan0 = 175
 aop0 = 240
@@ -539,7 +560,7 @@ dt_aop = np.deg2rad(180)
 
 i = 0
 max_i = 20000
-y_d = np.array([vinf_raan.value, vinf_dec.value]).reshape(2, 1)
+y_d = np.array([vinf_raan, vinf_dec]).reshape(2, 1)
 x = x0
 tol = np.array([10e-6, 10e-6]).reshape(2, 1)
 error = y0 - y_d
@@ -600,32 +621,63 @@ print(f"V_inf | raan: {y_d[0][0]} rad | dec: {y_d[1][0]} rad")
 # TLDR --> Satellite misses mars by 131768.52445 km
 # propagate the new satellite initial conditions after adjusting RAAN and AOP
 '''
+
+# Update parking orbit with converged values
+earth_parking.raan = (x[0][0] * u.deg).to(u.rad)
+earth_parking.aop = (x[1][0] * u.deg).to(u.rad)
+
 # this pos vector is wrt earth center
-r1_idealized = earth_parking.r_at_true_anomaly(earth_parking.f0).value
-r_pqw, _ = orb_2_pqw(r1_idealized,
+r1_earth_parking = earth_parking.r_at_true_anomaly(earth_parking.f0).value
+
+r_pqw, v_pqw = orb_2_pqw(r1_earth_parking,
                             earth_parking.f0.value, earth_parking.e.value,
                             earth_parking.p.value, earth_parking.mu.value)
 
 # converts perifocal frame to eci frame
-r_eci, _ = perif_2_eci(r_pqw, _, earth_parking.inc.value,
+r_eci, v_eci = perif_2_eci(r_pqw, v_pqw, earth_parking.inc.value,
                             earth_parking.raan.value,
                             earth_parking.aop.value)
                             
+v_hyp = np.sqrt(2*(((Vinf_mag.value**2)/2) + (earth_parking.mu.value/np.linalg.norm(r_eci))))
+sat_v_dir = v_eci/np.linalg.norm(v_eci)
+delta_v = v_hyp - np.sqrt(2*(earth_parking.energy.value + (earth_parking.mu.value/np.linalg.norm(r_eci))))
+v_postburn_eci = (v_eci + delta_v*sat_v_dir)*(u.km/u.s)
 
-# Your satellite's heliocentric position
-r1_sat_helio = r1_earth + r_eci  # Add Earth's position to your ECI position
+'''
+# # Your satellite's heliocentric position
+# r1_sat_helio = r1_earth + r_eci  # Add Earth's position to your ECI position
 
-# for redundancy since we can reuse our vinf dept vector, we can just recalc the departure velocity after adjusting RAAN and AOP 
+THIS IS WRONG SINCE r_eci is in the ECI frame, wrt to earths equatorial plane. We need to convert r_eci to heliocentric ecliptic frame first
+This is because Earth's axis is tilted at 23.5 degrees, so the ECI frame is not aligned with the heliocentric ecliptic frame. We need to rotate the r_eci vector by 23.5 degrees to get the correct heliocentric position of the satellite.
 
-def raan_dec_to_vinf(Vinf_mag, raan, dec):
-    
-    x = Vinf_mag*np.sin(np.pi/2-dec)*np.cos(raan)
-    y = Vinf_mag*np.sin(np.pi/2-dec)*np.sin(raan)
-    z = Vinf_mag*np.cos(np.pi/2-dec)
-    return np.array([x,y,z])
+ECI FRAME: The X axis points towards vernal equinox, Z points towards earths north pole and y completes the set:
+    ECI frame is tilted wrt to ecliptic frame by 23.5 degrees. The eci frame ignores earths tilt and xy plane is the equator 
 
-Vinf_dept_idealized = raan_dec_to_vinf(Vinf_mag.value, x[0][0], x[1][0])
-Vinf_ECI = Vinf_dept_idealized   # departure hyperbolic excess velcity in the ECI frame
+Ecliptic Frame: The X axis points towards vernal equinox, Z axis is perpendicular to the ecliptic plane (plane of earths orbit around sun), and y completes the set
+    ecliptic plane is the plane of earths orbit around the sun
+
+
+SAME FOR VELOCITY
+'''
+earth_tilt = np.deg2rad(23.43928)  # difference between equatorial plane and ecliptic plane
+
+eci_to_ecliptic = np.array([
+    [1, 0, 0],
+    [0, np.cos(earth_tilt), -np.sin(earth_tilt)],
+    [0, np.sin(earth_tilt), np.cos(earth_tilt)]
+])
+
+r_sat_ecliptic = eci_to_ecliptic @ r_eci  # km
+r1_sat_helio = r1_earth + r_sat_ecliptic
+
+#Lambert’s geometry and reconstructing a different orbit that merely has the same asymptote angles. WRONG 
+
+v_postburn_ecliptic = eci_to_ecliptic @ v_postburn_eci
+Transfer_V1_idealized = v_postburn_ecliptic.value + v1_earth
+
+Vinf_non_lamberts = Transfer_V1_idealized - v1_earth
+print(f'Non Lambert Vinf: {np.linalg.norm(Vinf_non_lamberts):.3f} km/s)\n')
+print(f'Lambert Vinf: {np.linalg.norm(Vinf_departure):.3f} km/s)\n')
 
 central_body = sun
 bodies = [mercury,venus,jupiter,saturn,uranus,neptune]
@@ -635,7 +687,7 @@ fun_arg = [central_body,bodies]
 
 # _, _, ys = propagate_rk4(sat.r0.value, sat.v0.value, t0, tf, dt, fun_arg)
 dt = TimeDelta(3600, format='sec')
-r_sats, _, _ = propagate_rk4(r1_sat_helio, Vinf_ECI, departure_date, arrival_date, dt, fun_arg=fun_arg)
+r_sats, _, _ = propagate_rk4(r1_sat_helio, Transfer_V1_idealized, departure_date, arrival_date, dt, fun_arg=fun_arg)
 
 r_mars_miss = r_sats[-1] - r2_mars
 print(f'Satellite Missed Mars Target by {np.linalg.norm(r_mars_miss):.5f} km')

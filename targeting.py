@@ -88,15 +88,17 @@ def sensitivity_matrix(orbit, v_inf_mag, x, dt_raan, dt_aop):
 
 
 # VRAJ OPTIMAL SOLN
+# OUTBOUND 
+Vinf_departure = np.array([-3.79357592,  0.94305524,  1.38257132])*(u.km/u.s)
+Vinf_mag = np.linalg.norm(Vinf_departure).to(u.km/u.s)
+vinf_raan, vinf_dec = v_to_raan_dec(Vinf_departure)
+
 C3 = 10.2
-vinf_arr = np.array([-2.3053362,  0.75875929,  0.93366132])*(u.km/u.s)
-vinf_mag = np.linalg.norm(vinf_arr).to(u.km/u.s)
-vinf_raan, vinf_dec = v_to_raan_dec(vinf_arr)
 
 raan0 = 175
 aop0 = 240
 x0 = np.array([raan0, aop0]).reshape(2, 1)
-y0 = sat_orbit_targeting(earth_parking, vinf_mag, x0)
+y0 = sat_orbit_targeting(earth_parking, Vinf_mag, x0)
 dt_raan = np.deg2rad(45)
 dt_aop = np.deg2rad(180)
 
@@ -108,11 +110,11 @@ tol = np.array([10e-6, 10e-6]).reshape(2, 1)
 error = y0 - y_d
 
 while np.any(np.abs(error) > tol):
-    f_x = sat_orbit_targeting(earth_parking, vinf_mag, x)
-    J = sensitivity_matrix(earth_parking, vinf_mag, x, dt_raan, dt_aop)
+    f_x = sat_orbit_targeting(earth_parking, Vinf_mag, x)
+    J = sensitivity_matrix(earth_parking, Vinf_mag, x, dt_raan, dt_aop)
 
     x_k = x - np.linalg.inv(J)@(f_x-y_d)
-    f_xk = sat_orbit_targeting(earth_parking, vinf_mag, x_k)
+    f_xk = sat_orbit_targeting(earth_parking, Vinf_mag, x_k)
     error = (f_xk-y_d)
 
     dt = (x_k-x)*np.linalg.norm(error)
@@ -135,7 +137,7 @@ else:
     print(f"===========================================")
     print(f"[TOL NOT SATISFIED] ERROR:{error.flatten()}")
 
-f_x = sat_orbit_targeting(earth_parking, vinf_mag, x)
+f_x = sat_orbit_targeting(earth_parking, Vinf_mag, x)
 error = (f_x-y_d)
 print(f"x | earth.raan = {x[0][0]}, earth.aop = {x[1][0]}")
 print(f"SatVel@f | raan: {f_x[0][0]} rad | dec: {f_x[1][0]} rad")

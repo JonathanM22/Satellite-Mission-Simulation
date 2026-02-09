@@ -398,9 +398,6 @@ def find_optimal_solution(results, weight_C3, weight_Vinf):
     Vinf_arrival_values = np.array([r['Vinf_arrival'] for r in results])
     Vinf_arrival_mag = np.linalg.norm(Vinf_arrival_values, axis=1)
     Vinf_departure_values = np.array([r['V_inf_dep'] for r in results])
-    Vinf_departure_mag = np.linalg.norm(Vinf_departure_values, axis=1)
-
-
     # tof_values = np.array([r['tof_days'] for r in results])
 
     # normalzing them to be between 0 and 1 
@@ -412,32 +409,27 @@ def find_optimal_solution(results, weight_C3, weight_Vinf):
     # minimize
     optimal_idx = np.argmin(score)
     optimal_C3 = C3_values[optimal_idx]
-    optimal_Vinf_arrival = Vinf_arrival_mag[optimal_idx]
-    optimal_Vinf_departure_mag = Vinf_departure_mag[optimal_idx]
-    optimal_solution = [optimal_C3, optimal_Vinf_arrival, optimal_Vinf_departure_mag]
+    # optimal_Vinf_arrival_mag = Vinf_arrival_mag[optimal_idx]
+    # optimal_Vinf_departure_mag = Vinf_departure_mag[optimal_idx]
+    # optimal_solution = [optimal_C3, optimal_Vinf_arrival_mag, optimal_Vinf_departure_mag]
     optimal_Vinf_departure = Vinf_departure_values[optimal_idx]
-    print(f"\nOptimal Mission Duration: {results[optimal_idx]['tof_days']} Days. Arrival Date = {departure_date+results[optimal_idx]['tof_days']} with (C3: {optimal_solution[0]:.3f} km²/s², Vinf Arrival: {optimal_solution[1]:.3f} km/s, Vinf Departure: {optimal_Vinf_departure_mag:.3f} km/s)\n")
-    return optimal_solution, optimal_Vinf_departure
+    optimal_Vinf_arrival = Vinf_arrival_values[optimal_idx]
+    print(f"\nOptimal Mission Duration: {results[optimal_idx]['tof_days']} Days. Arrival Date = {departure_date+results[optimal_idx]['tof_days']} with (C3: {optimal_C3:.3f} km²/s², Vinf Arrival: {np.linalg.norm(optimal_Vinf_arrival):.3f} km/s, Vinf Departure: {np.linalg.norm(optimal_Vinf_departure):.3f} km/s)\n")
+    return optimal_C3, optimal_Vinf_departure, optimal_Vinf_arrival
 
 # outputs array of optimal C3 & Vinf arrival based on assigned weights ( user defined )
-optimal_solution, optimal_Vinf_departure = find_optimal_solution(results, weight_C3=0.75, weight_Vinf=0.25)
-C3 = optimal_solution[0]
-Vinf_arrival = optimal_solution[1]*(u.km/u.s)
-Vinf_departure = optimal_Vinf_departure*(u.km/u.s)
+optimal_C3, optimal_Vinf_departure, optimal_Vinf_arrival = find_optimal_solution(results, weight_C3=0.75, weight_Vinf=0.25)
+C3 = optimal_C3
 
-# All heliocentric position and velocity vectors are in the ecliptic frame, so we need to convert the vinf departure vector to the ECI frame to get the correct RAAN and declination for the parking orbit targeting
+# V infinty departure and arrival vectors derived from lamberts: remember these are in the heliocentric ecliptic frame
+Vinf_departure = optimal_Vinf_departure #*(u.km/u.s)
+Vinf_arrival = optimal_Vinf_arrival #*(u.km/u.s)
 
-'''
-at this point I can differ my approach. 
-1. min good balance between c3 and vinf arrival --> convert to raan/dec/inclination for launch window --> continue with what Dr Ozimek suggested
-2. Select best C3 and vinf arrival --> full n-body simulaiton from Earth and Mars using rk4 & ydot_n_ephemeris --> 
-    diff between r2_mars & final pos form n-body sim to see how close we are to mars --> 
-        adjust initial vel accordingly and re run n-body sim until close enough to mars (for some cap) --> 
-           B-plane targetting
-'''
+# V infinty arival and departure magnitudes 
+Vinf_arrival_mag = np.linalg.norm(optimal_Vinf_arrival) #*(u.km/u.s)
+Vinf_departure_mag = np.linalg.norm(optimal_Vinf_departure) #*(u.km/u.s)
 
 # -------------------------------------------------------------------------------------------Step 2: Converting Vinf to RAAN/DEC/Inclination-------------------------------------------------------------------------------------------
-
 
 # to get declination and RAAN from vinf vector, we need the velocity to be in the ECI frame --> alr is 
 
@@ -453,6 +445,11 @@ Calculate lambert soln to get estimated C3, vinf arrival, RAAN, & dec
     --> gonna miss mars, but will implement differential correction for b plane targetting later
 '''
 
+
+'''
+# THe outbound launch asympote direction is defined by the right ascension and declination of the asymptote vector, which we can get from the Vinf departure vector from lamberts. 
+# We can then target the parking orbit to match that RAAN and declination, which will ensure that our outbound asymptote matches the lamberts soln vinf raan and dec.
+'''
 def vinf_to_raan_dec(Vinf): 
 
     Dec = np.arcsin(Vinf[2]/np.linalg.norm(Vinf))
@@ -461,6 +458,7 @@ def vinf_to_raan_dec(Vinf):
 
     return RAAN, Dec
 
+# All heliocentric position and velocity vectors are in the ecliptic frame, so we need to convert the vinf departure vector to the ECI frame to get the correct RAAN and declination for the parking orbit targeting
 
 # Convert V_infinity from ecliptic to ECI frame
 earth_tilt = np.deg2rad(23.43928)
@@ -476,11 +474,9 @@ Vinf_departure_eci = ecliptic_to_eci @ Vinf_departure
 RAAN_dep, Dec_dep = vinf_to_raan_dec(Vinf_departure_eci) 
 print(f'Outbound RAAN = {np.degrees(RAAN_dep): .3f}° | Outbound Declination = {np.degrees(Dec_dep): .3f}°\n')
 
-Earth_rad = 6378 #km
-
+# Earth_rad = 6378 #km
 
 # Define Earth Parking Orbit
-
 earth_parking = Orbit(mu=EARTH_MU,
                       a=32000*u.km,
                       e=0.80*u.km/u.km,  # unitless
@@ -493,7 +489,38 @@ earth_parking = Orbit(mu=EARTH_MU,
 # this function creates the X vector of Parking Orbit RAAN and AOP: the independent variables, that we will adjust to minimize the error vector
 # --> want to adjust those 2 until our outbound asymptote matches the lamert soln vinf raan and dec
 
+'''
+We want to target obtianing a parking orbit such tha when we apply the delta V to get onto the hyperbolic escape trajectory, the resulting Vinf vector produces the same launch asymptote with the  direction (same RAAN and declination) as the Vinf vector from lamberts.
+Might have to tweak where exactly we apply the delta V, but for now just applying it at periapsis and seeing what happens.
+
+Thinking of creating an error matrix between the Vinf from lamberts and some b plane targeting Vinf that we get from the parking orbit, then using newtons method to adjust the RAAN and AOP of the parking orbit until we minimize the error between the lamberts Vinf and the parking orbit Vinf.
+'''
+def perif_2_eci_DCM( inc, raan, aop):
+    """
+    Transforms perifocal fram to ECI frame
+    """
+    # Rotation matrices
+    R1 = np.array([  # Third axis rotation about raan
+        [np.cos(raan), -np.sin(raan), 0],
+        [np.sin(raan),  np.cos(raan), 0],
+        [0,             0,            1]
+    ])
+    R2 = np.array([  # First axis rotation about inc
+        [1, 0,              0],
+        [0, np.cos(inc), -np.sin(inc)],
+        [0, np.sin(inc),  np.cos(inc)]
+    ])
+    R3 = np.array([  # Third axis rotation about aop
+        [np.cos(aop), -np.sin(aop), 0],
+        [np.sin(aop),  np.cos(aop), 0],
+        [0,            0,           1]
+    ])
+    perif_2_eci_DCM = R1 @ R2 @ R3
+
+    return perif_2_eci_DCM 
+
 def sat_orbit_targeting(orbit, v_inf_mag, x):
+
 
     # orbit: Orbit object
     # defined this say so when using newtons methods, we can just pass in the orbit object and modify the raan and aop values directly
@@ -502,10 +529,10 @@ def sat_orbit_targeting(orbit, v_inf_mag, x):
 
     # Getting intial position & vel. This r is wrt to the central body: earth
     r = orbit.r_at_true_anomaly(orbit.f0)
-    v = np.sqrt(2*(orbit.energy + (orbit.mu/r)))
+    v = np.sqrt(2*(orbit.energy + (orbit.mu/r))).value
 
     # hyperbolic velocity at perigee
-    v_hyp = np.sqrt(2*(((v_inf_mag**2)/2) + (orbit.mu/r)))
+    v_hyp = np.sqrt(2*(((v_inf_mag**2)/2) + (orbit.mu.value/r.value)))
 
     # Converts the orbital elements from the orbital frame to the perifocal frame
     r_pqw, v_pqw = orb_2_pqw(r.value,
@@ -521,14 +548,43 @@ def sat_orbit_targeting(orbit, v_inf_mag, x):
     sat_v_dir = v_eci/np.linalg.norm(v_eci)
 
     # delta V that has to get applied to the satellite: Dv = V,p_hyp - V (in LEO using vis-viva)
+    # the instantaneous Delta V is applied to the periapsis of the parking orbit 
     dv = v_hyp - v
 
-    # New velocity after applying delta V. same as the hyperbolic excess velocity
-    v_eci = (v_eci + dv.value*sat_v_dir)*(u.km/u.s) 
+    e_hyp = 1 + (r.value*v_inf_mag**2)/(orbit.mu.value) # eccentricity of hyperbolic escape trajectory
+    print(f'Eccentricity of hyperbolic escape trajectory: {e_hyp:.3f}')
+    # rp and e point in same direction
+    a_hyp = -orbit.mu.value/v_inf_mag**2 # semi major axis of hyperbolic escape trajectory
+    e_hat = r_eci/np.linalg.norm(r_eci) # unit vector in direction of eccentricity vector, which points towards periapsis 
+    h = np.cross(r_eci, v_eci) # specific angular momentum vector
+    h_hat = h/np.linalg.norm(h) # unit vector in direction of specific angular momentum vector, which is perpendicular to the orbital plane
+    t_hat = np.cross(h_hat, e_hat) # unit vector in direction of tangential velocity, which is perpendicular to both the eccentricity vector and the specific angular momentum vector
 
-    raan, dec = vinf_to_raan_dec(v_eci)
+    # this vector is still in the perifocal frame. Need to change to ECI 
+    s_hat = -1/e_hyp * e_hat - np.sqrt((1-1/e_hyp**2))*t_hat 
+    # s_hat  = -1/e_hyp * e_hat - np.sqrt(1 - (orbit.mu.value**2/v_inf_mag**4*a_hyp**2*e_hyp**2))*t_hat 
+    s_hat = perif_2_eci_DCM(orbit.inc.value, orbit.raan.value, orbit.aop.value) @ s_hat
+    v_inf = v_inf_mag * s_hat
+    raan, dec = vinf_to_raan_dec(s_hat)
 
-    return np.array([raan.value, dec.value]).reshape(2, 1)
+
+    return np.array([raan, dec]).reshape(2, 1)
+'''
+ # this is straight up wrong. This is the post burn velocity after the spacecraft. which, funny enough, is just the hyperbolic perigee velocity. 
+    # this is not the same as the vinf vector at all --> needs to be changed
+   
+    # v_eci = (v_eci + dv*sat_v_dir) 
+
+    # wrong --> need the VINF vector, not the post burn. 
+    # the post burn velocity vector is the one that we should be transforming into the ecliptic frame and propagting towards mars. THis is analgous to transfer_v1 from lambers. 
+
+    
+    # raan, dec = vinf_to_raan_dec(v_eci)
+    
+    
+    # replace the v_eci above and actually solve for vinf vector. 
+'''
+   
 
 # Finite difference sensitivity matrix for newtons method. 
 # --> outputs the (2) columns of the jacobian matrix of the partial derivatives: d(raan,dec)/d(raan,aop) where RAAN and AOP are parking orbit independent variables and raan and dec are the outbound asymptote dependent variables
@@ -547,30 +603,26 @@ def sensitivity_matrix(orbit, v_inf_mag, x, dt_raan, dt_aop):
 
     return np.block([dt_raan_col, dt_aop_col])
 
-
-Vinf_mag = np.linalg.norm(Vinf_departure.value)*(u.km/u.s)
-vinf_raan, vinf_dec = vinf_to_raan_dec(Vinf_departure.value)
-
 raan0 = 175
 aop0 = 240
 x0 = np.array([raan0, aop0]).reshape(2, 1)
-y0 = sat_orbit_targeting(earth_parking, Vinf_mag, x0)
-dt_raan = np.deg2rad(45)
-dt_aop = np.deg2rad(180)
+y0 = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x0)
+dt_raan = np.deg2rad(5)
+dt_aop = np.deg2rad(5)
 
 i = 0
 max_i = 20000
-y_d = np.array([vinf_raan, vinf_dec]).reshape(2, 1)
+y_d = np.array([RAAN_dep, Dec_dep]).reshape(2, 1)
 x = x0
 tol = np.array([10e-6, 10e-6]).reshape(2, 1)
 error = y0 - y_d
 
 while np.any(np.abs(error) > tol):
-    f_x = sat_orbit_targeting(earth_parking, Vinf_mag, x)
-    J = sensitivity_matrix(earth_parking, Vinf_mag, x, dt_raan, dt_aop)
+    f_x = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x)
+    J = sensitivity_matrix(earth_parking, Vinf_departure_mag, x, dt_raan, dt_aop)
 
     x_k = x - np.linalg.inv(J)@(f_x-y_d)
-    f_xk = sat_orbit_targeting(earth_parking, Vinf_mag, x_k)
+    f_xk = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x_k)
     error = (f_xk-y_d)
 
     dt = (x_k-x)*np.linalg.norm(error)
@@ -593,7 +645,7 @@ else:
     print(f"===========================================")
     print(f"[TOL NOT SATISFIED] ERROR:{error.flatten()}")
 
-f_x = sat_orbit_targeting(earth_parking, Vinf_mag, x)
+f_x = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x)
 error = (f_x-y_d)
 print(f"x | earth.raan = {x[0][0]}, earth.aop = {x[1][0]}")
 print(f"SatVel@f | raan: {f_x[0][0]} rad | dec: {f_x[1][0]} rad")
@@ -623,9 +675,8 @@ print(f"V_inf | raan: {y_d[0][0]} rad | dec: {y_d[1][0]} rad")
 '''
 
 # Update parking orbit with converged values
-earth_parking.raan = (x[0][0] * u.deg).to(u.rad)
-earth_parking.aop = (x[1][0] * u.deg).to(u.rad)
-
+earth_parking.raan = (np.deg2rad(f_x[0][0]))
+earth_parking.aop = (np.deg2rad(f_x[1][0]))
 # this pos vector is wrt earth center
 r1_earth_parking = earth_parking.r_at_true_anomaly(earth_parking.f0).value
 
@@ -635,13 +686,13 @@ r_pqw, v_pqw = orb_2_pqw(r1_earth_parking,
 
 # converts perifocal frame to eci frame
 r_eci, v_eci = perif_2_eci(r_pqw, v_pqw, earth_parking.inc.value,
-                            earth_parking.raan.value,
-                            earth_parking.aop.value)
+                            earth_parking.raan,
+                            earth_parking.aop)
                             
-v_hyp = np.sqrt(2*(((Vinf_mag.value**2)/2) + (earth_parking.mu.value/np.linalg.norm(r_eci))))
+v_hyp = np.sqrt(2*(((Vinf_departure_mag**2)/2) + (earth_parking.mu.value/np.linalg.norm(r_eci))))
 sat_v_dir = v_eci/np.linalg.norm(v_eci)
 delta_v = v_hyp - np.sqrt(2*(earth_parking.energy.value + (earth_parking.mu.value/np.linalg.norm(r_eci))))
-v_postburn_eci = (v_eci + delta_v*sat_v_dir)*(u.km/u.s)
+v_postburn_eci = (v_eci + delta_v*sat_v_dir)
 
 '''
 # # Your satellite's heliocentric position
@@ -673,7 +724,7 @@ r1_sat_helio = r1_earth + r_sat_ecliptic
 #Lambert’s geometry and reconstructing a different orbit that merely has the same asymptote angles. WRONG 
 
 v_postburn_ecliptic = eci_to_ecliptic @ v_postburn_eci
-Transfer_V1_idealized = v_postburn_ecliptic.value + v1_earth
+Transfer_V1_idealized = v_postburn_ecliptic + v1_earth
 
 Vinf_non_lamberts = Transfer_V1_idealized - v1_earth
 print(f'Non Lambert Vinf: {np.linalg.norm(Vinf_non_lamberts):.3f} km/s)\n')

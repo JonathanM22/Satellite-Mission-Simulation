@@ -475,6 +475,7 @@ ecliptic_to_eci = np.array([
     [0, -np.sin(earth_tilt), np.cos(earth_tilt)]
 ])
 
+
 earth_tilt = np.deg2rad(23.43928)  # difference between equatorial plane and ecliptic plane
 
 eci_to_ecliptic = np.array([
@@ -482,6 +483,7 @@ eci_to_ecliptic = np.array([
     [0, np.cos(earth_tilt), -np.sin(earth_tilt)],
     [0, np.sin(earth_tilt), np.cos(earth_tilt)]
 ])
+
 
 Vinf_departure_eci = ecliptic_to_eci @ Vinf_departure
 RAAN_dep, Dec_dep = vinf_to_raan_dec(Vinf_departure_eci) 
@@ -510,131 +512,88 @@ Thinking of creating an error matrix between the Vinf from lamberts and some b p
 '''
 # -----------------------------------------------------------------------------Step 3:Differential Correction: Finding Correct outbound asymptote direction-----------------------------------------------------------------------------
 
-def sat_orbit_targeting(orbit, v_inf_mag, x):
+def sat_orbit_targeting(orbit, v_inf_mag, x, v1_earth):
 
 
     # orbit: Orbit object
     # defined this say so when using newtons methods, we can just pass in the orbit object and modify the raan and aop values directly
     orbit.raan = (x[0][0])
     orbit.aop = (x[1][0])
+    orbit.inc = (x[2][0])
 
     # Converts the orbital elements from the orbital frame to the perifocal frame
     r_pqw, v_pqw = orb_2_pqw(orbit.r_at_true_anomaly(orbit.f0).value,
-                             orbit.f0.value, orbit.e.value,
+                             orbit.f0, orbit.e.value,
                              orbit.p.value, orbit.mu.value)
     
     # converts perifocal frame to eci frame
-    r_eci, v_eci = perif_2_eci(r_pqw, v_pqw, orbit.inc.value,
+    r_eci, v_eci = perif_2_eci(r_pqw, v_pqw, orbit.inc,
                                orbit.raan,
                                orbit.aop)
-    
-     # hyperbolic velocity at perigee
+
+    # direction of delta V --> tangential to orbit --> same direction as v eci 
+    # hyperbolic velocity at perigee
     v_hyp = np.sqrt(2*(((v_inf_mag**2)/2) + (orbit.mu.value/np.linalg.norm(r_eci))))
 
-    # direction of delta V --> tangential to orbit --> same direction as v eci
-    sat_v_dir = v_eci/np.linalg.norm(v_eci)
+    v_dir = v_eci/np.linalg.norm(v_eci)
 
     # delta V that has to get applied to the satellite: Dv = V,p_hyp - V (in LEO using vis-viva)
     # the instantaneous Delta V is applied to the periapsis of the parking orbit 
     dv = v_hyp - np.linalg.norm(v_eci)
-
-    # v_postburn_eci = (v_eci + dv*sat_v_dir) 
-    # v_inf = v_postburn_eci - v1_earth
-
-    e_hyp = 1 + (np.linalg.norm(r_eci)*v_inf_mag**2)/(orbit.mu.value) # eccentricity of hyperbolic escape trajectory
-    print(f'Eccentricity of hyperbolic escape trajectory: {e_hyp:.3f}')
-    # rp and e point in same direction
-    a_hyp = -orbit.mu.value/v_inf_mag**2 # semi major axis of hyperbolic escape trajectory
-    e_hat = r_eci/np.linalg.norm(r_eci) # unit vector in direction of eccentricity vector, which points towards periapsis 
-    h = np.cross(r_eci, v_eci) # specific angular momentum vector
-    h_hat = h/np.linalg.norm(h) # unit vector in direction of specific angular momentum vector, which is perpendicular to the orbital plane
-    t_hat = np.cross(h_hat, e_hat) # unit vector in direction of tangential velocity, which is perpendicular to both the eccentricity vector and the specific angular momentum vector
-
-    # this vector is still in the perifocal frame. Need to change to ECI 
-    s_hat = -1/e_hyp * e_hat - np.sqrt((1-1/e_hyp**2))*t_hat 
-    # s_hat  = -1/e_hyp * e_hat - np.sqrt(1 - (orbit.mu.value**2/v_inf_mag**4*a_hyp**2*e_hyp**2))*t_hat 
-    s_hat = perif_2_eci_DCM(orbit.inc.value, orbit.raan, orbit.aop) @ s_hat
-    print(f'\n{s_hat}\n')
-    v_inf = v_inf_mag * s_hat
-    '''
-    # ADDED THESE TO SEE POSSIBLE COMBINATIONS AND TO SEE IF ANY ALIGN WITH THE V INF DIRECTION 
-    
-    v_postburn_eci = v_eci + dv*sat_v_dir
+    v_postburn_eci = v_eci + dv*v_dir
     v_postburn_ecliptic = eci_to_ecliptic @ v_postburn_eci
     transfer_v1_helio = v_postburn_ecliptic + v1_earth
-    transfer_v1_helio_eci = ecliptic_to_eci @ transfer_v1_helio
-    maybe_vinf = eci_to_ecliptic @ v_postburn_ecliptic - v1_earth
-    
-    print(f'\n{transfer_v1_helio_eci/np.linalg.norm(transfer_v1_helio_eci)}\n') 
-    print(f'\n{v_postburn_eci/np.linalg.norm(v_postburn_eci)}\n') 
-    print(f'\n{maybe_vinf/np.linalg.norm(maybe_vinf)}\n') 
 
-    '''
-  
-    raan, dec = vinf_to_raan_dec(v_inf)
-
-
-    return np.array([raan, dec]).reshape(2, 1)
-'''
- # this is straight up wrong. This is the post burn velocity after the spacecraft. which, funny enough, is just the hyperbolic perigee velocity. 
-    # this is not the same as the vinf vector at all --> needs to be changed
-   
-    # v_eci = (v_eci + dv*sat_v_dir) 
-
-    # wrong --> need the VINF vector, not the post burn. 
-    # the post burn velocity vector is the one that we should be transforming into the ecliptic frame and propagting towards mars. THis is analgous to transfer_v1 from lambers. 
-
-    
-    # raan, dec = vinf_to_raan_dec(v_eci)
-    
-    
-    # replace the v_eci above and actually solve for vinf vector. 
-'''
-   
+    return transfer_v1_helio.reshape(3, 1)
 
 # Finite difference sensitivity matrix for newtons method. 
 # --> outputs the (2) columns of the jacobian matrix of the partial derivatives: d(raan,dec)/d(raan,aop) where RAAN and AOP are parking orbit independent variables and raan and dec are the outbound asymptote dependent variables
-def sensitivity_matrix(orbit, v_inf_mag, x, dt_raan, dt_aop):
+def sensitivity_matrix(orbit, v_inf_mag, x, dt_raan, dt_aop,dt_inc,v1_earth):
 
     # Reshape dt_input args into dt vectors
-    dt_rann_ar = np.array([dt_raan, 0]).reshape(2, 1)
-    dt_aop_ar = np.array([0, dt_aop]).reshape(2, 1)
+    dt_rann_ar = np.array([dt_raan, 0,0]).reshape(3, 1)
+    dt_aop_ar = np.array([0, dt_aop,0]).reshape(3, 1)
+    dt_inc_ar = np.array([0,0,dt_inc]).reshape(3,1)
 
     # equations from AGI newtons method paper 
     dt_raan_col = (1/(dt_raan))*(sat_orbit_targeting(
-        orbit, v_inf_mag, x + dt_rann_ar) - sat_orbit_targeting(orbit, v_inf_mag, x))
+        orbit, v_inf_mag, x + dt_rann_ar, v1_earth) - sat_orbit_targeting(orbit, v_inf_mag, x, v1_earth))
 
     dt_aop_col = (1/(dt_aop))*(sat_orbit_targeting(
-        orbit, v_inf_mag, x + dt_aop_ar) - sat_orbit_targeting(orbit, v_inf_mag, x))
+        orbit, v_inf_mag, x + dt_aop_ar, v1_earth) - sat_orbit_targeting(orbit, v_inf_mag, x,v1_earth))
+    
+    dt_inc_col = (1/(dt_inc))*(sat_orbit_targeting(
+        orbit, v_inf_mag, x + dt_inc_ar, v1_earth) - sat_orbit_targeting(orbit,v_inf_mag,x,v1_earth))
 
-    return np.block([dt_raan_col, dt_aop_col])
+    return np.block([dt_raan_col, dt_aop_col, dt_inc_col])
 
 raan0 = np.deg2rad(175)
 aop0 = np.deg2rad(240)
-x0 = np.array([raan0, aop0]).reshape(2, 1)
-y0 = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x0)
-dt_raan = np.deg2rad(.01)
-dt_aop = np.deg2rad(.01)
+inc0 = np.deg2rad(28.5)
+
+x0 = np.array([raan0, aop0,inc0]).reshape(3, 1)
+y0 = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x0, v1_earth)
+
+dt_raan = 1e-6
+dt_aop = 1e-6
+dt_inc = 1e-6
 
 i = 0
 max_i = 20000
-y_d = np.array([RAAN_dep, Dec_dep]).reshape(2, 1)
+y_d = transfer_v1.reshape(3,1)
 x = x0
-tol = np.array([10e-8, 10e-8]).reshape(2, 1)
+tol = np.array([10e-6, 10e-6,10e-6]).reshape(3, 1)
 error = y0 - y_d
 
 while np.any(np.abs(error) > tol):
-    f_x = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x)
-    J = sensitivity_matrix(earth_parking, Vinf_departure_mag, x, dt_raan, dt_aop)
+    f_x = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x,v1_earth)
+    J = sensitivity_matrix(earth_parking, Vinf_departure_mag, x, dt_raan, dt_aop, dt_inc,v1_earth)
 
     x_k = x - np.linalg.inv(J)@(f_x-y_d)
-    f_xk = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x_k)
+    f_xk = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x_k, v1_earth)
     error = (f_xk-y_d)
 
     dt = (x_k-x)*np.linalg.norm(error)
-
-    dt_raan = dt[0][0]
-    dt_aop = dt[1][0]
 
     print(f"[{i}] ERROR:{error.flatten()}| DT: {dt.flatten()}")
 
@@ -651,7 +610,7 @@ else:
     print(f"===========================================")
     print(f"[TOL NOT SATISFIED] ERROR:{error.flatten()}")
 
-f_x = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x)
+f_x = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x,v1_earth)
 error = (f_x-y_d)
 print(f"x | earth.raan = {np.rad2deg(x[0][0])} deg  | earth.aop = {np.rad2deg(x[1][0])} deg ")
 print(f"SatVel@f | raan: {f_x[0][0]} rad | dec: {f_x[1][0]} rad")
@@ -660,24 +619,25 @@ print(f"V_inf | raan: {y_d[0][0]} rad | dec: {y_d[1][0]} rad")
 # ------------------------------------------------------------------------------------------Propagating Parking Orbit and Post Delta V Trajectory---------------------------------------------------------------------------------------------
 
 # Update parking orbit with converged values
-earth_parking.raan = ((x[0][0]))
-earth_parking.aop = ((x[1][0]))
+earth_parking.raan = (x[0][0])
+earth_parking.aop = (x[1][0])
+earth_parking.f0 = (x[2][0])
 
 # this pos vector is wrt earth center
 r1_earth_parking = earth_parking.r_at_true_anomaly(earth_parking.f0).value
 
 r_pqw, v_pqw = orb_2_pqw(r1_earth_parking,
-                            earth_parking.f0.value, earth_parking.e.value,
+                            earth_parking.f0, earth_parking.e.value,
                             earth_parking.p.value, earth_parking.mu.value)
 
 # converts perifocal frame to eci frame
-r_eci, v_eci = perif_2_eci(r_pqw, v_pqw, earth_parking.inc.value,
+r_eci, v_eci = perif_2_eci(r_pqw, v_pqw, earth_parking.inc,
                             earth_parking.raan,
                             earth_parking.aop)
                             
 v_hyp = np.sqrt(2*(((Vinf_departure_mag**2)/2) + (earth_parking.mu.value/np.linalg.norm(r_eci))))
 sat_v_dir = v_eci/np.linalg.norm(v_eci)
-delta_v = v_hyp - np.linalg.norm(v_eci)
+delta_v = v_hyp - np.sqrt(2*(earth_parking.energy.value + (earth_parking.mu.value/np.linalg.norm(r_eci))))
 v_postburn_eci = (v_eci + delta_v*sat_v_dir)
 
 '''
@@ -696,7 +656,6 @@ Ecliptic Frame: The X axis points towards vernal equinox, Z axis is perpendicula
 
 SAME FOR VELOCITY
 '''
-
 r_sat_ecliptic = eci_to_ecliptic @ r_eci  # km
 r1_sat_helio = r1_earth + r_sat_ecliptic
 

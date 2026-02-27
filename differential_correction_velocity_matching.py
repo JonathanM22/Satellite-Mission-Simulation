@@ -383,7 +383,12 @@ def find_optimal_solution(results, weight_C3, weight_Vinf):
     Vinf_arrival_mag = np.linalg.norm(Vinf_arrival_vectors, axis=1)
     Vinf_departure_vectors = np.array([r['V_inf_dep'] for r in results])
     transfer_v1_vectors = np.array([r['V1'] for r in results])
-
+    # r1_earth_vectors = np.array([r['r1'] for r in results])
+    # v1_earth_vectors = np.array([r['V_earth'] for r in results])
+    r2_mars_vectors = np.array([r['r2'] for r in results])
+    v2_mars_vectors = np.array([r['V_mars'] for r in results])
+    arrival_dates = np.array([r['arrival_date'] for r in results])
+    
     # tof_values = np.array([r['tof_days'] for r in results])
 
     # normalzing them to be between 0 and 1 
@@ -398,11 +403,16 @@ def find_optimal_solution(results, weight_C3, weight_Vinf):
     optimal_Vinf_departure = Vinf_departure_vectors[optimal_idx]
     optimal_Vinf_arrival = Vinf_arrival_vectors[optimal_idx]
     optimal_transfer_v1 = transfer_v1_vectors[optimal_idx]
-    print(f"\nOptimal Mission Duration: {results[optimal_idx]['tof_days']} Days. Arrival Date = {departure_date+results[optimal_idx]['tof_days']} with (C3: {optimal_C3:.3f} km²/s², Vinf Arrival: {np.linalg.norm(optimal_Vinf_arrival):.3f} km/s, Vinf Departure: {np.linalg.norm(optimal_Vinf_departure):.3f} km/s)\n")
-    return optimal_C3, optimal_Vinf_departure, optimal_Vinf_arrival, optimal_transfer_v1
+    # optimal_departure_earth_r1 = r1_earth_vectors[optimal_idx]
+    # optimal_depature_earth_v1 = v1_earth_vectors[optimal_idx]
+    optimal_arrival_earth_r2 = r2_mars_vectors[optimal_idx]
+    optimal_arrival_mars_v2 = v2_mars_vectors[optimal_idx]
+    arrival_date = arrival_dates[optimal_idx]
+    print(f"\nOptimal Mission Duration: {results[optimal_idx]['tof_days']} Days. Arrival Date = {[arrival_date]} with (C3: {optimal_C3:.3f} km²/s², Vinf Arrival: {np.linalg.norm(optimal_Vinf_arrival):.3f} km/s, Vinf Departure: {np.linalg.norm(optimal_Vinf_departure):.3f} km/s)\n")
+    return optimal_C3, optimal_Vinf_departure, optimal_Vinf_arrival, optimal_transfer_v1, optimal_arrival_earth_r2,optimal_arrival_mars_v2, arrival_date
 
 # outputs array of optimal C3 & Vinf arrival based on assigned weights ( user defined )
-optimal_C3, optimal_Vinf_departure, optimal_Vinf_arrival, optimal_transfer_v1 = find_optimal_solution(results, weight_C3=0.75, weight_Vinf=0.25)
+optimal_C3, optimal_Vinf_departure, optimal_Vinf_arrival, optimal_transfer_v1,r2_mars,v2_mars, arrival_date = find_optimal_solution(results, weight_C3=0.75, weight_Vinf=0.25)
 C3 = optimal_C3
 
 # V infinty departure and arrival vectors derived from lamberts: remember these are in the heliocentric ecliptic frame

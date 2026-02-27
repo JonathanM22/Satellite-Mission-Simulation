@@ -522,8 +522,6 @@ Thinking of creating an error matrix between the Vinf from lamberts and some b p
 
 def sat_orbit_targeting(orbit, v_inf_mag, x):
 
-
-    # orbit: Orbit object
     # defined this say so when using newtons methods, we can just pass in the orbit object and modify the raan and aop values directly
     orbit.raan = (x[0][0])
     orbit.aop = (x[1][0])
@@ -566,41 +564,62 @@ def sat_orbit_targeting(orbit, v_inf_mag, x):
     s_hat = perif_2_eci_DCM(orbit.inc.value, orbit.raan, orbit.aop) @ s_hat
     print(f'\n{s_hat}\n')
     v_inf = v_inf_mag * s_hat
-    '''
-    # ADDED THESE TO SEE POSSIBLE COMBINATIONS AND TO SEE IF ANY ALIGN WITH THE V INF DIRECTION 
-    
-    v_postburn_eci = v_eci + dv*sat_v_dir
-    v_postburn_ecliptic = eci_to_ecliptic @ v_postburn_eci
-    transfer_v1_helio = v_postburn_ecliptic + v1_earth
-    transfer_v1_helio_eci = ecliptic_to_eci @ transfer_v1_helio
-    maybe_vinf = eci_to_ecliptic @ v_postburn_ecliptic - v1_earth
-    
-    print(f'\n{transfer_v1_helio_eci/np.linalg.norm(transfer_v1_helio_eci)}\n') 
-    print(f'\n{v_postburn_eci/np.linalg.norm(v_postburn_eci)}\n') 
-    print(f'\n{maybe_vinf/np.linalg.norm(maybe_vinf)}\n') 
-
-    '''
-  
     raan, dec = vinf_to_raan_dec(v_inf)
-
-
     return np.array([raan, dec]).reshape(2, 1)
-'''
- # this is straight up wrong. This is the post burn velocity after the spacecraft. which, funny enough, is just the hyperbolic perigee velocity. 
-    # this is not the same as the vinf vector at all --> needs to be changed
-   
-    # v_eci = (v_eci + dv*sat_v_dir) 
 
-    # wrong --> need the VINF vector, not the post burn. 
-    # the post burn velocity vector is the one that we should be transforming into the ecliptic frame and propagting towards mars. THis is analgous to transfer_v1 from lambers. 
 
+"""
+New approach: Target Transfer_V1 instead of outbound geometry: Raan & Dec
+    1. Propagate V_p_hyp (mag) aka. V_post_burn --> to get V_inf from parking orbit to construct our transfer_v1 vector and compare that to lambert soln and minimize error
+Def function()
+
+    orbit.raan = (x[0][0])
+    orbit.aop = (x[1][0])
+
+    Get r,v in perifocal
+    get r,v in ECI
+
+    transfer_v1 defined as = Vinf + V_earth ( from lamberts)
+         Vinf is a result of V_post_burn velocity as r --> inf from central body (earth)
     
-    # raan, dec = vinf_to_raan_dec(v_eci)
+
+    V_postburn = v_eci + dv (in tangent direction)
+
+    DV defined as V_p_hpy - v_eci
+        V_p_hpy is the same the V_postburn velocity --> just the magnitude form used to get the vector form later
+        V_p_hpy =  np.sqrt(2*(((v_inf_mag**2)/2) + (orbit.mu.value/np.linalg.norm(r_eci))))   USES vinf from lamberts --> instead want to use the vinf from our propagating 
+
+    want to propagate v_p_hyp to infinty to get the resulting vinf vector from the parking orbit, then compare that to the transfer_v1 vector from lamberts, and minimize that error by adjusting the RAAN and AOP of the parking orbit
+
+    need to propogate the post burn velocity for a significant amount of time, with just earth as a body. Prop until the distance is large enough where the earths gravity well is negligible, then take the velocity vector at that point as the Vinf departure vector. Around Earth SOI r_eci distance
+
+             OR --> Propagate until the kth and k-1th velocity vector are within a certain tolerence
+
+
+    def propagate with earth function()
     
+    ydot function just earth as body --> 2 body motion (earth and sat) --> just be consisent with what frame we are in / what we are measuring wrt (dont mess up central body, kth, barycenter (origin), etc)
+    rk4 function to propagate to get the radius and velocity vectors
+
+        Here is where choice comes in. Either: 
+
+        1. Propagate until R_sat < R_SOI distance --> once hit --> V_sat when > R_SOI is the Vinf vector 
+        OR
+        2. Propagate until the change in 2 subseqeuent velocity vectors are within a certain tolerence. 
+
+    return Vinf from parking orbit
+
+    transfer_v1 (from parking) = Vinf + V_earth
     
-    # replace the v_eci above and actually solve for vinf vector. 
-'''
-   
+return transfer_v1
+
+
+ALTERNATE approach: instead of circling around V_P_hyp since it's definsed by vinf, but we're trying to numeriaclly calulaute vinf, we can iterate on the DV needed to get from v_eci to the transfer_v1 vector from lamberts, then get the resulting vinf from that DV, then adjust the DV until the resulting vinf matches the transfer_v1 vector from lamberts.
+    iterating on delta V --> propagate the resulting velocity vector to "infinity" to get the vinf vector --> compare to whichever is closest to Vinf --> select that as the DV to geet the post burn, and hence Vinf and transfer V1
+
+
+"""
+
 
 # Finite difference sensitivity matrix for newtons method. 
 # --> outputs the (2) columns of the jacobian matrix of the partial derivatives: d(raan,dec)/d(raan,aop) where RAAN and AOP are parking orbit independent variables and raan and dec are the outbound asymptote dependent variables
@@ -716,6 +735,17 @@ v_postburn_ecliptic = eci_to_ecliptic @ v_postburn_eci
 Transfer_V1_idealized = v_postburn_ecliptic + v1_earth
 
 Vinf_non_lamberts = Transfer_V1_idealized - v1_earth
+
+'''
+key difference:
+    In lamberts transfer_V1 = Vinf + Vearth. 
+    in parking orbit targetting, Transfer_V1 = Vpostburn_eci (which is the velocity after applying the delta V in the parking orbit) + v1_earth.
+         Vinf from lamberts is hyp excess velocity --> Far away from Earth where no influence of earths gravity well
+         Vinf from parking orbit is the velocity right after applying Delta V --> hence why extremely large Vinf, when calcuating transfer V - Earth
+             need to propogate the post burn velocity for a significant amount of time, with just earth as a body. Prop until the distance is large enough where the earths gravity well is negligible, then take the velocity vector at that point as the Vinf departure vector.
+             OR --> Propagate until the kth and k-1th velocity vector are within a certain tolerence
+'''
+
 print(f'Non Lambert Vinf: {np.linalg.norm(Vinf_non_lamberts):.3f} km/s)\n')
 print(f'Lambert Vinf: {np.linalg.norm(Vinf_departure):.3f} km/s)\n')
 

@@ -173,6 +173,37 @@ def y_dot_n_ephemeris(t, y, fun_arg: list):
 
     return y_dot
 
+def propagate_to_vinf(r0, v0, t0, earth_body, dt_seconds=60, r_stop=925000):
+    """
+    Propagate post-burn state in pure 2-body Earth gravity
+    using propagate_rk4 and y_dot_n_ephemeris.
+
+    r0, v0 : initial ECI state (km, km/s) wrt Earth
+    t0     : astropy Time object
+    earth_body : your Earth body object
+    """
+
+    # Use Earth as central body, no perturbations
+    central_body = earth_body
+    bodies = []
+    fun_arg = [central_body, bodies]
+
+    dt = TimeDelta(dt_seconds, format='sec')
+
+    # Propagate for some long max duration 
+    tf = t0 + TimeDelta(31 * 86400, format='sec') 
+
+    r_hist, v_hist, _ = propagate_rk4( r0, v0, t0, tf,  dt,fun_arg=fun_arg)
+
+    # Find first index where radius exceeds SOI
+    for i in range(len(r_hist)):
+        if np.linalg.norm(r_hist[i]) > r_stop:
+            return v_hist[i]
+
+    # If never exceeded SOI, return final velocity
+    return v_hist[-1]
+
+
 """
 Constants and Intialization
 """
@@ -424,7 +455,7 @@ transfer_v1 = optimal_transfer_v1
 Vinf_arrival_mag = np.linalg.norm(optimal_Vinf_arrival) #*(u.km/u.s)
 Vinf_departure_mag = np.linalg.norm(optimal_Vinf_departure) #*(u.km/u.s)
 
-# ------------------------------------------------------------------------------------------Gonna pause here and try to do n-body correction---------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------N-body Propagation of Lamberts Problem-------------------------------------------------------------------------------------------------
 
 # central_body = sun
 # bodies = [mercury,venus,jupiter,saturn,uranus,neptune]
@@ -440,10 +471,10 @@ Vinf_departure_mag = np.linalg.norm(optimal_Vinf_departure) #*(u.km/u.s)
 
 # # # thinking of doing newton raphson with f and g functions --> iterate v(_,_,_) = 0 --> proceed normally
 
-'''
-# TLDR --> Satellite misses mars by 131768.52445 km
-# propagate the new satellite initial conditions after adjusting RAAN and AOP
-'''
+# '''
+# # TLDR --> Satellite misses mars by 107720.77453445194 KM!! pretty nice initial guess
+# # propagate the new satellite initial conditions after adjusting RAAN and AOP
+# '''
 
 # -------------------------------------------------------------------------------------------Step 2: Converting Vinf to RAAN/DEC/Inclination-------------------------------------------------------------------------------------------
 
@@ -485,7 +516,6 @@ ecliptic_to_eci = np.array([
     [0, -np.sin(earth_tilt), np.cos(earth_tilt)]
 ])
 
-
 earth_tilt = np.deg2rad(23.43928)  # difference between equatorial plane and ecliptic plane
 
 eci_to_ecliptic = np.array([
@@ -494,8 +524,9 @@ eci_to_ecliptic = np.array([
     [0, np.sin(earth_tilt), np.cos(earth_tilt)]
 ])
 
-
 Vinf_departure_eci = ecliptic_to_eci @ Vinf_departure
+# array([-2.29252952,  2.189834  ,  0.38596186])
+
 RAAN_dep, Dec_dep = vinf_to_raan_dec(Vinf_departure_eci) 
 print(f'Outbound RAAN = {np.degrees(RAAN_dep): .3f}° | Outbound Declination = {np.degrees(Dec_dep): .3f}°\n')
 
@@ -503,8 +534,8 @@ print(f'Outbound RAAN = {np.degrees(RAAN_dep): .3f}° | Outbound Declination = {
 
 # Define Earth Parking Orbit
 earth_parking = Orbit(mu=EARTH_MU,
-                      a=32000*u.km,
-                      e=0.80*u.km/u.km,  # unitless
+                      a=(400+6378)*u.km,
+                      e=0.0*u.km/u.km,  # unitless
                       f0=(0*u.deg).to(u.rad),
                       inc=(28.5*u.deg).to(u.rad),
                       raan=(175*u.deg).to(u.rad),
@@ -522,42 +553,147 @@ Thinking of creating an error matrix between the Vinf from lamberts and some b p
 '''
 # -----------------------------------------------------------------------------Step 3:Differential Correction: Finding Correct outbound asymptote direction-----------------------------------------------------------------------------
 
+# def sat_orbit_targeting(orbit, v_inf_mag, x):
+
+#     # defined this say so when using newtons methods, we can just pass in the orbit object and modify the raan and aop values directly
+#     orbit.raan = (x[0][0])
+#     orbit.aop = (x[1][0])
+
+#     # Converts the orbital elements from the orbital frame to the perifocal frame
+#     r_pqw, v_pqw = orb_2_pqw(orbit.r_at_true_anomaly(orbit.f0).value,
+#                              orbit.f0.value, orbit.e.value,
+#                              orbit.p.value, orbit.mu.value)
+    
+#     # converts perifocal frame to eci frame
+#     r_eci, v_eci = perif_2_eci(r_pqw, v_pqw, orbit.inc.value,
+#                                orbit.raan,
+#                                orbit.aop)
+    
+#      # hyperbolic velocity at perigee
+#     v_hyp = np.sqrt(2*(((v_inf_mag**2)/2) + (orbit.mu.value/np.linalg.norm(r_eci))))
+
+#     # direction of delta V --> tangential to orbit --> same direction as v eci
+#     sat_v_dir = v_eci/np.linalg.norm(v_eci)
+
+#     # delta V that has to get applied to the satellite: Dv = V,p_hyp - V (in LEO using vis-viva)
+#     # the instantaneous Delta V is applied to the periapsis of the parking orbit 
+#     dv = v_hyp - np.linalg.norm(v_eci)
+
+#     # v_postburn_eci = (v_eci + dv*sat_v_dir) 
+#     # v_inf = v_postburn_eci - v1_earth
+
+#     e_hyp = 1 + (np.linalg.norm(r_eci)*v_inf_mag**2)/(orbit.mu.value) # eccentricity of hyperbolic escape trajectory
+#     print(f'Eccentricity of hyperbolic escape trajectory: {e_hyp:.3f}')
+#     # rp and e point in same direction
+#     a_hyp = -orbit.mu.value/v_inf_mag**2 # semi major axis of hyperbolic escape trajectory
+#     e_hat = r_eci/np.linalg.norm(r_eci) # unit vector in direction of eccentricity vector, which points towards periapsis 
+#     h = np.cross(r_eci, v_eci) # specific angular momentum vector
+#     h_hat = h/np.linalg.norm(h) # unit vector in direction of specific angular momentum vector, which is perpendicular to the orbital plane
+#     t_hat = np.cross(h_hat, e_hat) # unit vector in direction of tangential velocity, which is perpendicular to both the eccentricity vector and the specific angular momentum vector
+
+#     # this vector is still in the perifocal frame. Need to change to ECI 
+#     s_hat = -1/e_hyp * e_hat - np.sqrt((1-1/e_hyp**2))*t_hat 
+#     # s_hat  = -1/e_hyp * e_hat - np.sqrt(1 - (orbit.mu.value**2/v_inf_mag**4*a_hyp**2*e_hyp**2))*t_hat 
+#     s_hat = perif_2_eci_DCM(orbit.inc.value, orbit.raan, orbit.aop) @ s_hat
+#     print(f'\n{s_hat}\n')
+#     v_inf = v_inf_mag * s_hat
+#     raan, dec = vinf_to_raan_dec(v_inf)
+#     return np.array([raan, dec]).reshape(2, 1)
+
+
+"""
+New approach: Target Transfer_V1 instead of outbound geometry: Raan & Dec
+    1. Propagate V_p_hyp (mag) aka. V_post_burn --> to get V_inf from parking orbit to construct our transfer_v1 vector and compare that to lambert soln and minimize error
+Def function()
+
+    orbit.raan = (x[0][0])
+    orbit.aop = (x[1][0])
+
+    Get r,v in perifocal
+    get r,v in ECI
+
+    transfer_v1 defined as = Vinf + V_earth ( from lamberts)
+         Vinf is a result of V_post_burn velocity as r --> inf from central body (earth)
+    
+
+    V_postburn = v_eci + dv (in tangent direction)
+
+    DV defined as V_p_hpy - v_eci
+        V_p_hpy is the same the V_postburn velocity --> just the magnitude form used to get the vector form later
+        V_p_hpy =  np.sqrt(2*(((v_inf_mag**2)/2) + (orbit.mu.value/np.linalg.norm(r_eci))))   USES vinf from lamberts --> instead want to use the vinf from our propagating 
+
+    want to propagate v_p_hyp to infinty to get the resulting vinf vector from the parking orbit, then compare that to the transfer_v1 vector from lamberts, and minimize that error by adjusting the RAAN and AOP of the parking orbit
+
+    need to propogate the post burn velocity for a significant amount of time, with just earth as a body. Prop until the distance is large enough where the earths gravity well is negligible, then take the velocity vector at that point as the Vinf departure vector. Around Earth SOI r_eci distance
+
+             OR --> Propagate until the kth and k-1th velocity vector are within a certain tolerence
+
+
+    def propagate with earth function()
+    
+    ydot function just earth as body --> 2 body motion (earth and sat) --> just be consisent with what frame we are in / what we are measuring wrt (dont mess up central body, kth, barycenter (origin), etc)
+    rk4 function to propagate to get the radius and velocity vectors
+
+        Here is where choice comes in. Either: 
+
+        1. Propagate until R_sat < R_SOI distance --> once hit --> V_sat when > R_SOI is the Vinf vector 
+        OR
+        2. Propagate until the change in 2 subseqeuent velocity vectors are within a certain tolerence. 
+
+    return Vinf from parking orbit
+
+    transfer_v1 (from parking) = Vinf + V_earth
+    
+return transfer_v1
+
+
+ALTERNATE approach: instead of circling around V_P_hyp since it's definsed by vinf, but we're trying to numeriaclly calulaute vinf, we can iterate on the DV needed to get from v_eci to the transfer_v1 vector from lamberts, then get the resulting vinf from that DV, then adjust the DV until the resulting vinf matches the transfer_v1 vector from lamberts.
+    iterating on delta V --> propagate the resulting velocity vector to "infinity" to get the vinf vector --> compare to whichever is closest to Vinf --> select that as the DV to geet the post burn, and hence Vinf and transfer V1
+        - The dv needs to be applied tangent to the orbit at periapsis. Iterate on the magnitutude so that when the post burn velocity is propagated to infinity, and added with earth, it matches with lamberts 
+            - make sure that the orbital aop and raan are such that the direction of the vinf vector is correct ( same RAAN and declination as lamberts) --> this will ensure that the geometry of the outbound asymptote is correct, then we can just iterate on the magnitude of the delta V to get the correct vinf magnitude that matches with lamberts.
+            
+
+"""
 def sat_orbit_targeting(orbit, v_inf_mag, x, v1_earth):
 
-
-    # orbit: Orbit object
-    # defined this say so when using newtons methods, we can just pass in the orbit object and modify the raan and aop values directly
+#   defined this say so when using newtons methods, we can just pass in the orbit object and modify the raan and aop values directly
     orbit.raan = (x[0][0])
     orbit.aop = (x[1][0])
     orbit.inc = (x[2][0])
 
     # Converts the orbital elements from the orbital frame to the perifocal frame
     r_pqw, v_pqw = orb_2_pqw(orbit.r_at_true_anomaly(orbit.f0).value,
-                             orbit.f0, orbit.e.value,
+                             orbit.f0.value, orbit.e.value,
                              orbit.p.value, orbit.mu.value)
     
     # converts perifocal frame to eci frame
     r_eci, v_eci = perif_2_eci(r_pqw, v_pqw, orbit.inc,
                                orbit.raan,
                                orbit.aop)
-
-    # direction of delta V --> tangential to orbit --> same direction as v eci 
+    
     # hyperbolic velocity at perigee
     v_hyp = np.sqrt(2*(((v_inf_mag**2)/2) + (orbit.mu.value/np.linalg.norm(r_eci))))
 
-    v_dir = v_eci/np.linalg.norm(v_eci)
+    # direction of delta V --> tangential to orbit --> same direction as v eci
+    sat_v_dir = v_eci/np.linalg.norm(v_eci)
 
     # delta V that has to get applied to the satellite: Dv = V,p_hyp - V (in LEO using vis-viva)
     # the instantaneous Delta V is applied to the periapsis of the parking orbit 
     dv = v_hyp - np.linalg.norm(v_eci)
-    v_postburn_eci = v_eci + dv*v_dir
-    v_postburn_ecliptic = eci_to_ecliptic @ v_postburn_eci
-    transfer_v1_helio = v_postburn_ecliptic + v1_earth
 
-    return transfer_v1_helio.reshape(3, 1)
+    v_postburn_eci = (v_eci + dv*sat_v_dir) 
 
-# Finite difference sensitivity matrix for newtons method. 
-# --> outputs the (2) columns of the jacobian matrix of the partial derivatives: d(raan,dec)/d(raan,aop) where RAAN and AOP are parking orbit independent variables and raan and dec are the outbound asymptote dependent variables
+    # Propagate in 2-body Earth gravity
+    v_inf_eci = propagate_to_vinf(r_eci, v_postburn_eci, departure_date,earth)
+
+    # Convert to ecliptic
+    v_inf_ecl = eci_to_ecliptic @ v_inf_eci
+
+    # Construct heliocentric transfer velocity
+    transfer_v1_from_parking = v_inf_ecl + v1_earth
+
+    return transfer_v1_from_parking.reshape(3,1)
+
 def sensitivity_matrix(orbit, v_inf_mag, x, dt_raan, dt_aop,dt_inc,v1_earth):
 
     # Reshape dt_input args into dt vectors
@@ -581,29 +717,33 @@ raan0 = np.deg2rad(175)
 aop0 = np.deg2rad(240)
 inc0 = np.deg2rad(28.5)
 
-x0 = np.array([raan0, aop0,inc0]).reshape(3, 1)
-y0 = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x0, v1_earth)
+dt_raan = np.deg2rad(.01)
+dt_aop = np.deg2rad(.01)
+dt_inc = np.deg2rad(.01)
 
-dt_raan = 1e-6
-dt_aop = 1e-6
-dt_inc = 1e-6
+x0 = np.array([raan0, aop0, inc0]).reshape(3, 1)
+y0 = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x0,v1_earth)
 
 i = 0
 max_i = 20000
-y_d = transfer_v1.reshape(3,1)
+y_d = transfer_v1.reshape(3, 1)
 x = x0
-tol = np.array([10e-6, 10e-6,10e-6]).reshape(3, 1)
+tol = np.array([10e-8, 10e-8, 10e-8]).reshape(3, 1)
 error = y0 - y_d
 
 while np.any(np.abs(error) > tol):
     f_x = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x,v1_earth)
-    J = sensitivity_matrix(earth_parking, Vinf_departure_mag, x, dt_raan, dt_aop, dt_inc,v1_earth)
+    J = sensitivity_matrix(earth_parking, Vinf_departure_mag, x, dt_raan, dt_aop,dt_inc,v1_earth)
 
     x_k = x - np.linalg.inv(J)@(f_x-y_d)
-    f_xk = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x_k, v1_earth)
+    f_xk = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x_k,v1_earth)
     error = (f_xk-y_d)
 
     dt = (x_k-x)*np.linalg.norm(error)
+
+    dt_raan = dt[0][0]
+    dt_aop = dt[1][0]
+    dt_inc = dt[2][0]
 
     print(f"[{i}] ERROR:{error.flatten()}| DT: {dt.flatten()}")
 
@@ -627,28 +767,25 @@ print(f"SatVel@f | raan: {f_x[0][0]} rad | dec: {f_x[1][0]} rad")
 print(f"V_inf | raan: {y_d[0][0]} rad | dec: {y_d[1][0]} rad")
 
 # ------------------------------------------------------------------------------------------Propagating Parking Orbit and Post Delta V Trajectory---------------------------------------------------------------------------------------------
-
 # Update parking orbit with converged values
-earth_parking.raan = (x[0][0])
-earth_parking.aop = (x[1][0])
-earth_parking.f0 = (x[2][0])
+earth_parking.raan = ((x[0][0]))
+earth_parking.aop = ((x[1][0]))
+earth_parking.inc = ((x[2][0]))
 
 # this pos vector is wrt earth center
 r1_earth_parking = earth_parking.r_at_true_anomaly(earth_parking.f0).value
 
 r_pqw, v_pqw = orb_2_pqw(r1_earth_parking,
-                            earth_parking.f0, earth_parking.e.value,
+                            earth_parking.f0.value, earth_parking.e.value,
                             earth_parking.p.value, earth_parking.mu.value)
 
 # converts perifocal frame to eci frame
-r_eci, v_eci = perif_2_eci(r_pqw, v_pqw, earth_parking.inc,
+r_eci, v_eci = perif_2_eci(r_pqw, v_pqw, earth_parking.inc.value,
                             earth_parking.raan,
                             earth_parking.aop)
-                            
-v_hyp = np.sqrt(2*(((Vinf_departure_mag**2)/2) + (earth_parking.mu.value/np.linalg.norm(r_eci))))
-sat_v_dir = v_eci/np.linalg.norm(v_eci)
-delta_v = v_hyp - np.sqrt(2*(earth_parking.energy.value + (earth_parking.mu.value/np.linalg.norm(r_eci))))
-v_postburn_eci = (v_eci + delta_v*sat_v_dir)
+
+# Update parking orbit with converged values
+transfer_v1_from_parking = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x,v1_earth)
 
 '''
 # # Your satellite's heliocentric position
@@ -662,21 +799,23 @@ ECI FRAME: The X axis points towards vernal equinox, Z points towards earths nor
 
 Ecliptic Frame: The X axis points towards vernal equinox, Z axis is perpendicular to the ecliptic plane (plane of earths orbit around sun), and y completes the set
     ecliptic plane is the plane of earths orbit around the sun
-
-
 SAME FOR VELOCITY
 '''
+
 r_sat_ecliptic = eci_to_ecliptic @ r_eci  # km
 r1_sat_helio = r1_earth + r_sat_ecliptic
 
 #Lambert’s geometry and reconstructing a different orbit that merely has the same asymptote angles. WRONG 
-
-v_postburn_ecliptic = eci_to_ecliptic @ v_postburn_eci
-Transfer_V1_idealized = v_postburn_ecliptic + v1_earth
-
-Vinf_non_lamberts = Transfer_V1_idealized - v1_earth
-print(f'Non Lambert Vinf: {np.linalg.norm(Vinf_non_lamberts):.3f} km/s)\n')
-print(f'Lambert Vinf: {np.linalg.norm(Vinf_departure):.3f} km/s)\n')
+'''
+key difference:
+    In lamberts transfer_V1 = Vinf + Vearth. 
+    in parking orbit targetting, Transfer_V1 = Vpostburn_eci (which is the velocity after applying the delta V in the parking orbit) + v1_earth.
+         Vinf from lamberts is hyp excess velocity --> Far away from Earth where no influence of earths gravity well
+         Vinf from parking orbit is the velocity right after applying Delta V --> hence why extremely large Vinf, when calcuating transfer V - Earth
+             need to propogate the post burn velocity for a significant amount of time, with just earth as a body. Prop until the distance is large enough where the earths gravity well is negligible, then take the velocity vector at that point as the Vinf departure vector.
+             OR --> Propagate until the kth and k-1th velocity vector are within a certain tolerence
+'''
+# -----------------------------------------------------------------------------------------N-body Propagation of Parking Orbit post Delta V--------------------------------------------------------------------------------------------
 
 central_body = sun
 bodies = [mercury,venus,jupiter,saturn,uranus,neptune]
@@ -686,7 +825,7 @@ fun_arg = [central_body,bodies]
 
 # _, _, ys = propagate_rk4(sat.r0.value, sat.v0.value, t0, tf, dt, fun_arg)
 dt = TimeDelta(3600, format='sec')
-r_sats, _, _ = propagate_rk4(r1_sat_helio, Transfer_V1_idealized, departure_date, arrival_date, dt, fun_arg=fun_arg)
+r_sats, _, _ = propagate_rk4(r1_sat_helio, transfer_v1_from_parking, departure_date, arrival_date, dt, fun_arg=fun_arg)
 
 r_mars_miss = r_sats[-1] - r2_mars
 print(f'Satellite Missed Mars Target by {np.linalg.norm(r_mars_miss):.5f} km')

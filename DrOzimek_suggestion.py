@@ -616,7 +616,9 @@ return transfer_v1
 
 ALTERNATE approach: instead of circling around V_P_hyp since it's definsed by vinf, but we're trying to numeriaclly calulaute vinf, we can iterate on the DV needed to get from v_eci to the transfer_v1 vector from lamberts, then get the resulting vinf from that DV, then adjust the DV until the resulting vinf matches the transfer_v1 vector from lamberts.
     iterating on delta V --> propagate the resulting velocity vector to "infinity" to get the vinf vector --> compare to whichever is closest to Vinf --> select that as the DV to geet the post burn, and hence Vinf and transfer V1
-
+        - The dv needs to be applied tangent to the orbit at periapsis. Iterate on the magnitutude so that when the post burn velocity is propagated to infinity, and added with earth, it matches with lamberts 
+            - make sure that the orbital aop and raan are such that the direction of the vinf vector is correct ( same RAAN and declination as lamberts) --> this will ensure that the geometry of the outbound asymptote is correct, then we can just iterate on the magnitude of the delta V to get the correct vinf magnitude that matches with lamberts.
+            
 
 """
 
@@ -761,4 +763,3 @@ r_sats, _, _ = propagate_rk4(r1_sat_helio, Transfer_V1_idealized, departure_date
 
 r_mars_miss = r_sats[-1] - r2_mars
 print(f'Satellite Missed Mars Target by {np.linalg.norm(r_mars_miss):.5f} km')
-

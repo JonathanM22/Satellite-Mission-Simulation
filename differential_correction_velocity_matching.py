@@ -21,6 +21,8 @@ from astropy.coordinates import get_body_barycentric_posvel
 from astropy.coordinates import get_body_barycentric
 from poliastro.bodies import Sun
 from poliastro.iod import vallado
+
+import orbit
 k = Sun.k
 """
 Functions
@@ -173,35 +175,68 @@ def y_dot_n_ephemeris(t, y, fun_arg: list):
 
     return y_dot
 
-def propagate_to_vinf(r0, v0, t0, earth_body, dt_seconds=60, r_stop=925000):
-    """
-    Propagate post-burn state in pure 2-body Earth gravity
-    using propagate_rk4 and y_dot_n_ephemeris.
+# def propagate_to_vinf(r0, v0, t0, earth_body, dt_seconds=60, r_stop=925000):
+#     """
+#     Propagate post-burn state in pure 2-body Earth gravity
+#     using propagate_rk4 and y_dot_n_ephemeris.
 
-    r0, v0 : initial ECI state (km, km/s) wrt Earth
-    t0     : astropy Time object
-    earth_body : your Earth body object
-    """
+#     r0, v0 : initial ECI state (km, km/s) wrt Earth
+#     t0     : astropy Time object
+#     earth_body : your Earth body object
+#     """
 
-    # Use Earth as central body, no perturbations
-    central_body = earth_body
-    bodies = []
-    fun_arg = [central_body, bodies]
+#     # Use Earth as central body, no perturbations
+#     central_body = earth_body
+#     bodies = [Sun]
+#     fun_arg = [central_body, bodies]
 
-    dt = TimeDelta(dt_seconds, format='sec')
+#     dt = TimeDelta(dt_seconds, format='sec')
 
-    # Propagate for some long max duration 
-    tf = t0 + TimeDelta(31 * 86400, format='sec') 
+#     # Propagate for some long max duration 
+#     tf = t0 + TimeDelta(31 * 86400, format='sec') 
 
-    r_hist, v_hist, _ = propagate_rk4( r0, v0, t0, tf,  dt,fun_arg=fun_arg)
+#     r_hist, v_hist, _ = propagate_rk4( r0, v0, t0, tf,  dt,fun_arg=fun_arg)
 
-    # Find first index where radius exceeds SOI
-    for i in range(len(r_hist)):
-        if np.linalg.norm(r_hist[i]) > r_stop:
-            return v_hist[i]
+#     # Find first index where radius exceeds SOI
+#     for i in range(len(r_hist)):
+#         if np.linalg.norm(r_hist[i]) > r_stop:
+#             return v_hist[i]
 
-    # If never exceeded SOI, return final velocity
-    return v_hist[-1]
+#     # If never exceeded SOI, return final velocity
+#     return v_hist[-1]
+
+def y_dot_2body_earth(t, y, mu):
+
+    r = y[:3]
+    v = y[3:]
+
+    r_mag = np.linalg.norm(r)
+
+    a = -mu * r / r_mag**3
+
+    return np.concatenate((v, a))
+
+def propagate_to_vinf(r0, v0, mu_earth, dt, r_stop=925000):
+
+    y = np.concatenate((r0, v0))
+    t = 0
+
+    while True:
+
+        y = RK4_single_step(
+            y_dot_2body_earth,
+            TimeDelta(dt, format='sec'),
+            t,
+            y,
+            mu_earth
+        )
+
+        r = y[:3]
+
+        if np.linalg.norm(r) > r_stop:
+            return y[3:]   # velocity ≈ vinf
+
+        t += dt
 
 
 """
@@ -436,11 +471,11 @@ def find_optimal_solution(results, weight_C3, weight_Vinf):
     optimal_transfer_v1 = transfer_v1_vectors[optimal_idx]
     # optimal_departure_earth_r1 = r1_earth_vectors[optimal_idx]
     # optimal_depature_earth_v1 = v1_earth_vectors[optimal_idx]
-    optimal_arrival_earth_r2 = r2_mars_vectors[optimal_idx]
+    optimal_arrival_mars_r2 = r2_mars_vectors[optimal_idx]
     optimal_arrival_mars_v2 = v2_mars_vectors[optimal_idx]
     arrival_date = arrival_dates[optimal_idx]
     print(f"\nOptimal Mission Duration: {results[optimal_idx]['tof_days']} Days. Arrival Date = {[arrival_date]} with (C3: {optimal_C3:.3f} km²/s², Vinf Arrival: {np.linalg.norm(optimal_Vinf_arrival):.3f} km/s, Vinf Departure: {np.linalg.norm(optimal_Vinf_departure):.3f} km/s)\n")
-    return optimal_C3, optimal_Vinf_departure, optimal_Vinf_arrival, optimal_transfer_v1, optimal_arrival_earth_r2,optimal_arrival_mars_v2, arrival_date
+    return optimal_C3, optimal_Vinf_departure, optimal_Vinf_arrival, optimal_transfer_v1, optimal_arrival_mars_r2,optimal_arrival_mars_v2, arrival_date
 
 # outputs array of optimal C3 & Vinf arrival based on assigned weights ( user defined )
 optimal_C3, optimal_Vinf_departure, optimal_Vinf_arrival, optimal_transfer_v1,r2_mars,v2_mars, arrival_date = find_optimal_solution(results, weight_C3=0.75, weight_Vinf=0.25)
@@ -683,9 +718,9 @@ def sat_orbit_targeting(orbit, v_inf_mag, x, v1_earth):
 
     v_postburn_eci = (v_eci + dv*sat_v_dir) 
 
-    # Propagate in 2-body Earth gravity
-    v_inf_eci = propagate_to_vinf(r_eci, v_postburn_eci, departure_date,earth)
-
+    # Propagate in 2-body Earth gravity  
+    # v_inf_eci = propagate_to_vinf(r_eci, v_postburn_eci, departure_date,earth)
+    v_inf_eci = propagate_to_vinf(r_eci, v_postburn_eci,orbit.mu.value,dt=360)
     # Convert to ecliptic
     v_inf_ecl = eci_to_ecliptic @ v_inf_eci
 
@@ -700,16 +735,16 @@ def sensitivity_matrix(orbit, v_inf_mag, x, dt_raan, dt_aop,dt_inc,v1_earth):
     dt_rann_ar = np.array([dt_raan, 0,0]).reshape(3, 1)
     dt_aop_ar = np.array([0, dt_aop,0]).reshape(3, 1)
     dt_inc_ar = np.array([0,0,dt_inc]).reshape(3,1)
-
+    fx_nom = sat_orbit_targeting(orbit, v_inf_mag, x, v1_earth)
     # equations from AGI newtons method paper 
     dt_raan_col = (1/(dt_raan))*(sat_orbit_targeting(
-        orbit, v_inf_mag, x + dt_rann_ar, v1_earth) - sat_orbit_targeting(orbit, v_inf_mag, x, v1_earth))
+        orbit, v_inf_mag, x + dt_rann_ar, v1_earth) - fx_nom)
 
     dt_aop_col = (1/(dt_aop))*(sat_orbit_targeting(
-        orbit, v_inf_mag, x + dt_aop_ar, v1_earth) - sat_orbit_targeting(orbit, v_inf_mag, x,v1_earth))
+        orbit, v_inf_mag, x + dt_aop_ar, v1_earth) - fx_nom)
     
     dt_inc_col = (1/(dt_inc))*(sat_orbit_targeting(
-        orbit, v_inf_mag, x + dt_inc_ar, v1_earth) - sat_orbit_targeting(orbit,v_inf_mag,x,v1_earth))
+        orbit, v_inf_mag, x + dt_inc_ar, v1_earth) - fx_nom)
 
     return np.block([dt_raan_col, dt_aop_col, dt_inc_col])
 
@@ -717,9 +752,9 @@ raan0 = np.deg2rad(175)
 aop0 = np.deg2rad(240)
 inc0 = np.deg2rad(28.5)
 
-dt_raan = np.deg2rad(.01)
-dt_aop = np.deg2rad(.01)
-dt_inc = np.deg2rad(.01)
+dt_raan = np.deg2rad(.5)
+dt_aop = np.deg2rad(.5)
+dt_inc = np.deg2rad(.5)
 
 x0 = np.array([raan0, aop0, inc0]).reshape(3, 1)
 y0 = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x0,v1_earth)
@@ -728,7 +763,7 @@ i = 0
 max_i = 20000
 y_d = transfer_v1.reshape(3, 1)
 x = x0
-tol = np.array([10e-8, 10e-8, 10e-8]).reshape(3, 1)
+tol = np.array([10e-6, 10e-6, 10e-6]).reshape(3, 1)
 error = y0 - y_d
 
 while np.any(np.abs(error) > tol):
@@ -741,9 +776,9 @@ while np.any(np.abs(error) > tol):
 
     dt = (x_k-x)*np.linalg.norm(error)
 
-    dt_raan = dt[0][0]
-    dt_aop = dt[1][0]
-    dt_inc = dt[2][0]
+    # dt_raan = dt[0][0]
+    # dt_aop = dt[1][0]
+    # dt_inc = dt[2][0]
 
     print(f"[{i}] ERROR:{error.flatten()}| DT: {dt.flatten()}")
 

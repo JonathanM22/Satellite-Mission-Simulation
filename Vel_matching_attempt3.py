@@ -746,11 +746,22 @@ key difference:
 print(f'Non Lambert Vinf: {np.linalg.norm(transfer_v1_from_parking-v1_earth):.3f} km/s)\n')
 print(f'Lambert Vinf: {np.linalg.norm(Vinf_departure):.3f} km/s)\n')
 
+# propagate with new initial conditions from parking orbit targeting
+def sphere_of_influence(body, sun_mu):
+  
+    a = body.a.value  # semi-major axis of planet around sun (km)
+    body.mu = G.value * body.mass.value  
+    mu_ratio = body.mu / sun_mu
+    r_soi = a * (mu_ratio)**(2/5)
+    return r_soi
+
+earth_soi = sphere_of_influence(earth, SUN_MU)
+mars_soi = sphere_of_influence(mars, SUN_MU)
+
+# -----------------------------------------------------------------------------------------------------------Propagation--------------------------------------------------------------------------------------------------------------
 central_body = sun
 bodies = [mercury,venus,jupiter,saturn,uranus,neptune]
 fun_arg = [central_body,bodies]
-
-# propagate with new initial conditions from parking orbit targeting
 
 # _, _, ys = propagate_rk4(sat.r0.value, sat.v0.value, t0, tf, dt, fun_arg)
 dt = TimeDelta(3600, format='sec')
@@ -764,6 +775,8 @@ print(f'Satellite Missed Mars Target by {np.linalg.norm(r_mars_miss):.5f} km')
     # for ex, if distance to earth < SOI --> central body = earth 
     # if the distance if SOI earth < distance to sun < SOI mars --> central body = sun, etc. 
     # if the distance to mars < SOI mars --> central body = mars, etc.
+# I also have to account for earths gravity within its SOI and mars' gravity within its SOI --> so the list of bodies and central has to change
 
-# what i did not is kind of a short cut where I used the predetermined Vinf from lamberts to reconstruct the vinf vector from parking orbit. Ideally I should be propagting the post dV velocity to a point where earth gravity is negligable to get the true vinf vector 
+# what i did  is kind of a short cut where I used the predetermined Vinf from lamberts to reconstruct the vinf vector from parking orbit. Ideally I should be propagting the post dV velocity to a point where earth gravity is negligable to get the true vinf vector 
 # --> will figure that out next. 
+

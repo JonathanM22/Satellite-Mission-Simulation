@@ -72,6 +72,7 @@ VENUS_MASS = (4.867 * 10**24) * u.kg
 SOLAR_SYS_MASS = SUN_MASS + EARTH_MASS + MARS_MASS + JUPITER_MASS + SATURN_MASS + URANAS_MASS + NEPTUNE_MASS + MERCURY_MASS + VENUS_MASS
 SOLAR_SYS_MU = SOLAR_SYS_MASS * G
 
+
 # Intialize bodies
 epoch = Time("2026-11-08")
 solar_system_ephemeris.set('de432s')
@@ -86,3 +87,5 @@ uranus = Body(URANAS_MASS, epoch, celestial_body="uranus", color="cyan")
 neptune = Body(NEPTUNE_MASS, epoch, celestial_body="neptune", color="cyan")
 mercury = Body(MERCURY_MASS, epoch, celestial_body="mercury", color="cyan")
 venus = Body(VENUS_MASS, epoch, celestial_body="venus", color="cyan")
+earth.a = 149597870.7 * u.km
+mars.a = 227943820 * u.km

@@ -357,9 +357,6 @@ for tof_days in tof_range:
 """
 # Display results in a table
 """
-# Syntax was taken from Claude im not gonna lie LOL
-
-# Spike in the p
 
 print("\n" + "="*140)
 print(f"{'TOF (days)':<12} {'C3 (km²/s²)':<15} {'V∞ Dep (km/s)':<16} {'V∞ Arr (km/s)':<16} {'Transfer Angle (°)':<20} {'Arrival Date':<20}")
@@ -567,7 +564,6 @@ def sat_orbit_targeting(orbit, v_inf_mag, x,v1_earth):
     # print(f'V_inf: {v_inf}') --> Outputs the correct direction and mag when compared to vinf eci. Now want to add Earths V1 to get the full vector transfer V1
     v_inf_ecl = eci_to_ecliptic @ v_inf_eci
     transfer_v1 = v_inf_ecl + v1_earth
-    # print(f'Transfer V1: {transfer_v1}')
     return np.array([transfer_v1]).reshape(3,1)
 """
 New approach: Target Transfer_V1 instead of outbound geometry: Raan & Dec
@@ -622,29 +618,28 @@ ALTERNATE approach: instead of circling around V_P_hyp since it's definsed by vi
             
 
 """
-
-
 # Finite difference sensitivity matrix for newtons method. 
 # --> outputs the (2) columns of the jacobian matrix of the partial derivatives: d(raan,dec)/d(raan,aop) where RAAN and AOP are parking orbit independent variables and raan and dec are the outbound asymptote dependent variables
-def sensitivity_matrix(orbit, v_inf_mag, x, dt_raan, dt_aop, v1_earth):
 
+def sensitivity_matrix(orbit, v_inf_mag, x, dt_raan, dt_aop, v1_earth,f_x):
     # Reshape dt_input args into dt vectors
     dt_rann_ar = np.array([dt_raan, 0]).reshape(2, 1)
     dt_aop_ar = np.array([0, dt_aop]).reshape(2, 1)
-
     # equations from AGI newtons method paper 
     dt_raan_col = (1/(dt_raan))*(sat_orbit_targeting(
-        orbit, v_inf_mag, x + dt_rann_ar,v1_earth) - sat_orbit_targeting(orbit, v_inf_mag, x,v1_earth))
+        orbit, v_inf_mag, x + dt_rann_ar,v1_earth) - f_x)
 
     dt_aop_col = (1/(dt_aop))*(sat_orbit_targeting(
-        orbit, v_inf_mag, x + dt_aop_ar,v1_earth) - sat_orbit_targeting(orbit, v_inf_mag, x,v1_earth))
+        orbit, v_inf_mag, x + dt_aop_ar,v1_earth) - f_x)
 
     return np.block([dt_raan_col, dt_aop_col])
 
 raan0 = np.deg2rad(175)
 aop0 = np.deg2rad(240)
+
 x0 = np.array([raan0, aop0]).reshape(2, 1)
 y0 = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x0,v1_earth)
+
 dt_raan = np.deg2rad(.0001)
 dt_aop = np.deg2rad(.0001)
 
@@ -656,27 +651,24 @@ tol = np.array([10e-8, 10e-8, 10e-8]).reshape(3, 1)
 error = y0 - y_d
 
 while np.any(np.abs(error) > tol):
+    # iter 1
     f_x = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x,v1_earth)
-    J = sensitivity_matrix(earth_parking, Vinf_departure_mag, x, dt_raan, dt_aop, v1_earth)
+    error = (f_x-y_d)
+
+    J = sensitivity_matrix(earth_parking, Vinf_departure_mag, x, dt_raan, dt_aop, v1_earth,f_x)
     x_k = x - np.linalg.pinv(J)@(f_x-y_d)
-    f_xk = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x_k,v1_earth)
-    error = (f_xk-y_d)
 
-    dt = (x_k-x)*np.linalg.norm(error)
-
-    # dt_raan = dt[0][0]
-    # dt_aop = dt[1][0]
-
-    print(f"\n[{i}] ERROR:{error.flatten()}| DT: {dt.flatten()}")
+    print(f"[{i}] ERROR:{error.flatten()}")
+    print(f"Transfer V1 from parking Orbit {i}: {f_x.flatten()}")
+    print(f"Parking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = {np.rad2deg(x[1][0])} deg\n ")
 
     x = x_k
-    print(f"\nParking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = {np.rad2deg(x[1][0])} deg ")
-
     i += 1
     if i > max_i:
         print(f"[MAX ITER] ERROR:{error.flatten()}")
         break
     x = x % (2*np.pi) # make sure raan and aop values are between 0 and 2pi
+
 if np.linalg.norm(error) < 0.1:
     print(f"===========================================")
     print(f"[TOL SATISFIED] ERROR:{error.flatten()}")
@@ -758,11 +750,12 @@ def sphere_of_influence(body, sun_mu):
 earth_soi = sphere_of_influence(earth, SUN_MU)
 mars_soi = sphere_of_influence(mars, SUN_MU)
 
+# now need to add some sort of central body decider
+
 # -----------------------------------------------------------------------------------------------------------Propagation--------------------------------------------------------------------------------------------------------------
 central_body = sun
 bodies = [mercury,venus,jupiter,saturn,uranus,neptune]
 fun_arg = [central_body,bodies]
-
 # _, _, ys = propagate_rk4(sat.r0.value, sat.v0.value, t0, tf, dt, fun_arg)
 dt = TimeDelta(3600, format='sec')
 r_sats, _, _ = propagate_rk4(r1_sat_helio, transfer_v1_from_parking, departure_date, arrival_date, dt, fun_arg=fun_arg)

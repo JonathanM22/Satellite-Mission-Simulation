@@ -216,7 +216,7 @@ def y_dot_2body_earth(t, y, mu):
 
     return np.concatenate((v, a))
 
-def propagate_to_vinf(r0, v0, mu_earth, dt, r_stop=925000):
+def propagate_to_vinf(r0, v0, mu_earth, dt, r_stop=9250000):
 
     y = np.concatenate((r0, v0))
     t = 0
@@ -588,7 +588,7 @@ Thinking of creating an error matrix between the Vinf from lamberts and some b p
 '''
 # -----------------------------------------------------------------------------Step 3:Differential Correction: Finding Correct outbound asymptote direction-----------------------------------------------------------------------------
 
-# def sat_orbit_targeting(orbit, v_inf_mag, x):
+# def sat_orbit_targeting(orbit, v_inf_mag, x,v1_earth):
 
 #     # defined this say so when using newtons methods, we can just pass in the orbit object and modify the raan and aop values directly
 #     orbit.raan = (x[0][0])
@@ -618,22 +618,24 @@ Thinking of creating an error matrix between the Vinf from lamberts and some b p
 #     # v_inf = v_postburn_eci - v1_earth
 
 #     e_hyp = 1 + (np.linalg.norm(r_eci)*v_inf_mag**2)/(orbit.mu.value) # eccentricity of hyperbolic escape trajectory
-#     print(f'Eccentricity of hyperbolic escape trajectory: {e_hyp:.3f}')
+#     # print(f'Eccentricity of hyperbolic escape trajectory: {e_hyp:.3f}')
 #     # rp and e point in same direction
 #     a_hyp = -orbit.mu.value/v_inf_mag**2 # semi major axis of hyperbolic escape trajectory
 #     e_hat = r_eci/np.linalg.norm(r_eci) # unit vector in direction of eccentricity vector, which points towards periapsis 
 #     h = np.cross(r_eci, v_eci) # specific angular momentum vector
 #     h_hat = h/np.linalg.norm(h) # unit vector in direction of specific angular momentum vector, which is perpendicular to the orbital plane
 #     t_hat = np.cross(h_hat, e_hat) # unit vector in direction of tangential velocity, which is perpendicular to both the eccentricity vector and the specific angular momentum vector
-
 #     # this vector is still in the perifocal frame. Need to change to ECI 
 #     s_hat = -1/e_hyp * e_hat - np.sqrt((1-1/e_hyp**2))*t_hat 
 #     # s_hat  = -1/e_hyp * e_hat - np.sqrt(1 - (orbit.mu.value**2/v_inf_mag**4*a_hyp**2*e_hyp**2))*t_hat 
 #     s_hat = perif_2_eci_DCM(orbit.inc.value, orbit.raan, orbit.aop) @ s_hat
-#     print(f'\n{s_hat}\n')
-#     v_inf = v_inf_mag * s_hat
-#     raan, dec = vinf_to_raan_dec(v_inf)
-#     return np.array([raan, dec]).reshape(2, 1)
+#     # print(f'\n{s_hat}\n')
+#     v_inf_eci = v_inf_mag * s_hat  # --> in the eliptic frame. need to be in ecliptic frame before adding earths velocity
+#     # print(f'V_inf: {v_inf}') --> Outputs the correct direction and mag when compared to vinf eci. Now want to add Earths V1 to get the full vector transfer V1
+#     v_inf_ecl = eci_to_ecliptic @ v_inf_eci
+#     transfer_v1 = v_inf_ecl + v1_earth
+#     # print(f'Transfer V1: {transfer_v1}')
+#     return np.array([transfer_v1]).reshape(3,1)
 
 
 """
@@ -694,7 +696,6 @@ def sat_orbit_targeting(orbit, v_inf_mag, x, v1_earth):
 #   defined this say so when using newtons methods, we can just pass in the orbit object and modify the raan and aop values directly
     orbit.raan = (x[0][0])
     orbit.aop = (x[1][0])
-    orbit.inc = (x[2][0])
 
     # Converts the orbital elements from the orbital frame to the perifocal frame
     r_pqw, v_pqw = orb_2_pqw(orbit.r_at_true_anomaly(orbit.f0).value,
@@ -721,6 +722,7 @@ def sat_orbit_targeting(orbit, v_inf_mag, x, v1_earth):
     # Propagate in 2-body Earth gravity  
     # v_inf_eci = propagate_to_vinf(r_eci, v_postburn_eci, departure_date,earth)
     v_inf_eci = propagate_to_vinf(r_eci, v_postburn_eci,orbit.mu.value,dt=360)
+    print(f'\n{v_inf_eci}\n')
     # Convert to ecliptic
     v_inf_ecl = eci_to_ecliptic @ v_inf_eci
 
@@ -729,64 +731,54 @@ def sat_orbit_targeting(orbit, v_inf_mag, x, v1_earth):
 
     return transfer_v1_from_parking.reshape(3,1)
 
-def sensitivity_matrix(orbit, v_inf_mag, x, dt_raan, dt_aop,dt_inc,v1_earth):
-
+def sensitivity_matrix(orbit, v_inf_mag, x, dt_raan, dt_aop, v1_earth,f_x):
     # Reshape dt_input args into dt vectors
-    dt_rann_ar = np.array([dt_raan, 0,0]).reshape(3, 1)
-    dt_aop_ar = np.array([0, dt_aop,0]).reshape(3, 1)
-    dt_inc_ar = np.array([0,0,dt_inc]).reshape(3,1)
-    fx_nom = sat_orbit_targeting(orbit, v_inf_mag, x, v1_earth)
+    dt_rann_ar = np.array([dt_raan, 0]).reshape(2, 1)
+    dt_aop_ar = np.array([0, dt_aop]).reshape(2, 1)
     # equations from AGI newtons method paper 
     dt_raan_col = (1/(dt_raan))*(sat_orbit_targeting(
-        orbit, v_inf_mag, x + dt_rann_ar, v1_earth) - fx_nom)
+        orbit, v_inf_mag, x + dt_rann_ar,v1_earth) - f_x)
 
     dt_aop_col = (1/(dt_aop))*(sat_orbit_targeting(
-        orbit, v_inf_mag, x + dt_aop_ar, v1_earth) - fx_nom)
-    
-    dt_inc_col = (1/(dt_inc))*(sat_orbit_targeting(
-        orbit, v_inf_mag, x + dt_inc_ar, v1_earth) - fx_nom)
+        orbit, v_inf_mag, x + dt_aop_ar,v1_earth) - f_x)
 
-    return np.block([dt_raan_col, dt_aop_col, dt_inc_col])
+    return np.block([dt_raan_col, dt_aop_col])
 
 raan0 = np.deg2rad(175)
 aop0 = np.deg2rad(240)
-inc0 = np.deg2rad(28.5)
 
-dt_raan = np.deg2rad(.5)
-dt_aop = np.deg2rad(.5)
-dt_inc = np.deg2rad(.5)
-
-x0 = np.array([raan0, aop0, inc0]).reshape(3, 1)
+x0 = np.array([raan0, aop0]).reshape(2, 1)
 y0 = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x0,v1_earth)
+
+dt_raan = np.deg2rad(.01)
+dt_aop = np.deg2rad(.01)
 
 i = 0
 max_i = 20000
 y_d = transfer_v1.reshape(3, 1)
 x = x0
-tol = np.array([10e-6, 10e-6, 10e-6]).reshape(3, 1)
+tol = np.array([10e-8, 10e-8, 10e-8]).reshape(3, 1)
 error = y0 - y_d
 
 while np.any(np.abs(error) > tol):
+    # iter 1
     f_x = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x,v1_earth)
-    J = sensitivity_matrix(earth_parking, Vinf_departure_mag, x, dt_raan, dt_aop,dt_inc,v1_earth)
+    error = (f_x-y_d)
 
-    x_k = x - np.linalg.inv(J)@(f_x-y_d)
-    f_xk = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x_k,v1_earth)
-    error = (f_xk-y_d)
+    J = sensitivity_matrix(earth_parking, Vinf_departure_mag, x, dt_raan, dt_aop, v1_earth,f_x)
+    x_k = x - np.linalg.pinv(J)@(f_x-y_d)
 
-    dt = (x_k-x)*np.linalg.norm(error)
-
-    # dt_raan = dt[0][0]
-    # dt_aop = dt[1][0]
-    # dt_inc = dt[2][0]
-
-    print(f"[{i}] ERROR:{error.flatten()}| DT: {dt.flatten()}")
+    print(f"[{i}] ERROR:{error.flatten()}")
+    print(f"Transfer V1 from parking Orbit {i}: {f_x.flatten()}")
+    print(f"Parking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = {np.rad2deg(x[1][0])} deg\n ")
 
     x = x_k
+
     i += 1
     if i > max_i:
         print(f"[MAX ITER] ERROR:{error.flatten()}")
         break
+    x = x % (2*np.pi) # make sure raan and aop values are between 0 and 2pi
 
 if np.linalg.norm(error) < 0.1:
     print(f"===========================================")
@@ -797,15 +789,14 @@ else:
 
 f_x = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x,v1_earth)
 error = (f_x-y_d)
-print(f"x | earth.raan = {np.rad2deg(x[0][0])} deg  | earth.aop = {np.rad2deg(x[1][0])} deg ")
-print(f"SatVel@f | raan: {f_x[0][0]} rad | dec: {f_x[1][0]} rad")
-print(f"V_inf | raan: {y_d[0][0]} rad | dec: {y_d[1][0]} rad")
+print(f"\nParking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = {np.rad2deg(x[1][0])} deg ")
+print(f"Numerically converged Transfer Velocity V1: {f_x.flatten()}")
+print(f"Lambert derived Transfer Velocity V1: {y_d.flatten()}")
 
 # ------------------------------------------------------------------------------------------Propagating Parking Orbit and Post Delta V Trajectory---------------------------------------------------------------------------------------------
 # Update parking orbit with converged values
 earth_parking.raan = ((x[0][0]))
 earth_parking.aop = ((x[1][0]))
-earth_parking.inc = ((x[2][0]))
 
 # this pos vector is wrt earth center
 r1_earth_parking = earth_parking.r_at_true_anomaly(earth_parking.f0).value

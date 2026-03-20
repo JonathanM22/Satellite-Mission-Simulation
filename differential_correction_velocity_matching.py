@@ -46,7 +46,7 @@ def propagate_rk4(r0, v0, t0, tf, dt, fun_arg: list):
     ts = np.arange(t0, tf, dt)
     n_steps = len(ts)
     ys = np.zeros((n_steps, 6))
-    y0 = np.concatenate((r0, v0))
+    y0 = np.concatenate((r0, v0.flatten()))
     ys[0] = y0
     step = 1
     for i in range(n_steps - 1):
@@ -175,7 +175,7 @@ def y_dot_n_ephemeris(t, y, fun_arg: list):
 
     return y_dot
 
-# def propagate_to_vinf(r0, v0, t0, earth_body, dt_seconds=60, r_stop=925000):
+# def propagate_to_vinf(r0, v0, t0, earth_body, dt_seconds=360, r_stop=9250000):
 #     """
 #     Propagate post-burn state in pure 2-body Earth gravity
 #     using propagate_rk4 and y_dot_n_ephemeris.
@@ -187,7 +187,7 @@ def y_dot_n_ephemeris(t, y, fun_arg: list):
 
 #     # Use Earth as central body, no perturbations
 #     central_body = earth_body
-#     bodies = [Sun]
+#     bodies = []
 #     fun_arg = [central_body, bodies]
 
 #     dt = TimeDelta(dt_seconds, format='sec')
@@ -720,16 +720,31 @@ def sat_orbit_targeting(orbit, v_inf_mag, x, v1_earth):
     v_postburn_eci = (v_eci + dv*sat_v_dir) 
 
     # Propagate in 2-body Earth gravity  
-    # v_inf_eci = propagate_to_vinf(r_eci, v_postburn_eci, departure_date,earth)
-    v_inf_eci = propagate_to_vinf(r_eci, v_postburn_eci,orbit.mu.value,dt=360)
+    # departure_date = Time("2026-10-19")
+    # v_inf_eci = propagate_to_vinf(r_eci, v_postburn_eci,departure_date,earth,360,r_stop=9250000)    # first function option
+    v_inf_eci = propagate_to_vinf(r_eci, v_postburn_eci,orbit.mu.value,dt=360)                    # second function option
     print(f'\n{v_inf_eci}\n')
+
     # Convert to ecliptic
     v_inf_ecl = eci_to_ecliptic @ v_inf_eci
 
     # Construct heliocentric transfer velocity
     transfer_v1_from_parking = v_inf_ecl + v1_earth
 
-    return transfer_v1_from_parking.reshape(3,1)
+    return transfer_v1_from_parking.reshape(3, 1)
+
+'''
+    function 1 output: [8] ERROR:[-0.00100594  0.00081407  0.00053755]
+    Transfer V1 from parking Orbit 8: [-15.4951473   26.46801695  11.89340784]
+    Parking Orbit RAAN = 123.35547236336552 deg  | Parking Orbit AOP = 226.0911628728602 deg
+
+    function 2 output: [8] ERROR:[-0.00040906  0.00033103  0.00021859]
+    Transfer V1 from parking Orbit 8: [-15.49455042  26.46753391  11.89308888]
+    Parking Orbit RAAN = 123.3554717122768 deg  | Parking Orbit AOP = 226.0911222900096 deg
+
+    # WOOOOOOO: 10th iteration of newtons: [-2.2932568   2.18984608  0.38628807] matches with the vinf direction from lamberts after prop. only issue is that its not within the error. of 1e-6, instead its only to 1e-4
+    # --> gets diff orbit RAAN and AOP values from other code despite having almost the same transfer V1
+'''
 
 def sensitivity_matrix(orbit, v_inf_mag, x, dt_raan, dt_aop, v1_earth,f_x):
     # Reshape dt_input args into dt vectors
@@ -744,20 +759,20 @@ def sensitivity_matrix(orbit, v_inf_mag, x, dt_raan, dt_aop, v1_earth,f_x):
 
     return np.block([dt_raan_col, dt_aop_col])
 
-raan0 = np.deg2rad(175)
-aop0 = np.deg2rad(240)
+raan0 = np.deg2rad(123.355471)
+aop0 = np.deg2rad(226.091122)
 
 x0 = np.array([raan0, aop0]).reshape(2, 1)
 y0 = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x0,v1_earth)
 
-dt_raan = np.deg2rad(.01)
-dt_aop = np.deg2rad(.01)
+dt_raan = np.deg2rad(.00001)
+dt_aop = np.deg2rad(.00001)
 
 i = 0
 max_i = 20000
 y_d = transfer_v1.reshape(3, 1)
 x = x0
-tol = np.array([10e-8, 10e-8, 10e-8]).reshape(3, 1)
+tol = np.array([10e-4, 10e-4, 10e-4]).reshape(3, 1)
 error = y0 - y_d
 
 while np.any(np.abs(error) > tol):
@@ -778,7 +793,7 @@ while np.any(np.abs(error) > tol):
     if i > max_i:
         print(f"[MAX ITER] ERROR:{error.flatten()}")
         break
-    x = x % (2*np.pi) # make sure raan and aop values are between 0 and 2pi
+    # x = x % (2*np.pi) # make sure raan and aop values are between 0 and 2pi
 
 if np.linalg.norm(error) < 0.1:
     print(f"===========================================")
@@ -843,6 +858,9 @@ key difference:
 '''
 # -----------------------------------------------------------------------------------------N-body Propagation of Parking Orbit post Delta V--------------------------------------------------------------------------------------------
 
+# Numerically converged Transfer Velocity V1: [-15.49455038  26.46753395  11.89308889]
+
+
 central_body = sun
 bodies = [mercury,venus,jupiter,saturn,uranus,neptune]
 fun_arg = [central_body,bodies]
@@ -850,9 +868,16 @@ fun_arg = [central_body,bodies]
 # propagate with new initial conditions from parking orbit targeting
 
 # _, _, ys = propagate_rk4(sat.r0.value, sat.v0.value, t0, tf, dt, fun_arg)
-dt = TimeDelta(3600, format='sec')
-r_sats, _, _ = propagate_rk4(r1_sat_helio, transfer_v1_from_parking, departure_date, arrival_date, dt, fun_arg=fun_arg)
+dt = TimeDelta(1000, format='sec')
+r_sats, v_sats, _ = propagate_rk4(r1_sat_helio, transfer_v1_from_parking, departure_date, arrival_date, dt, fun_arg=fun_arg)
 
 r_mars_miss = r_sats[-1] - r2_mars
 print(f'Satellite Missed Mars Target by {np.linalg.norm(r_mars_miss):.5f} km')
+
+np.save('correction_nbody_prop.npy', { 'r_sats': r_sats, 'v_sats': v_sats})
+
+correction_nbody_prop = np.load('correction_nbody_prop.npy', allow_pickle=True)[()]
+r_sats = correction_nbody_prop['r_sats']
+v_sats = correction_nbody_prop['v_sats']
+
 

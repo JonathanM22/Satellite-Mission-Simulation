@@ -667,7 +667,7 @@ while np.any(np.abs(error) > tol):
     if i > max_i:
         print(f"[MAX ITER] ERROR:{error.flatten()}")
         break
-    x = x % (2*np.pi) # make sure raan and aop values are between 0 and 2pi
+    # x = x % (2*np.pi) # make sure raan and aop values are between 0 and 2pi
 
 if np.linalg.norm(error) < 0.1:
     print(f"===========================================")
@@ -758,11 +758,17 @@ bodies = [mercury,venus,jupiter,saturn,uranus,neptune]
 fun_arg = [central_body,bodies]
 # _, _, ys = propagate_rk4(sat.r0.value, sat.v0.value, t0, tf, dt, fun_arg)
 dt = TimeDelta(3600, format='sec')
-r_sats, _, _ = propagate_rk4(r1_sat_helio, transfer_v1_from_parking, departure_date, arrival_date, dt, fun_arg=fun_arg)
+r_sats, v_sats, _ = propagate_rk4(r1_sat_helio, transfer_v1_from_parking, departure_date, arrival_date, dt, fun_arg=fun_arg)
 
 r_mars_miss = r_sats[-1] - r2_mars
 print(f'Satellite Missed Mars Target by {np.linalg.norm(r_mars_miss):.5f} km')
 # np.float64(152919.23711579296) km. not bad for first guess. Will need now to work on b plane targetting. 
+
+np.save('correction_nbody_prop.npz', { 'r_sats': r_sats, 'v_sats': v_sats})
+
+correction_nbody_prop = np.load('correction_nbody_prop.npz', allow_pickle=True)[()]
+r_sats = correction_nbody_prop['r_sats']
+v_sats = correction_nbody_prop['v_sats']
 
 # also want to implement a way to consider the sphere of influence, and change what the central body is as a funciton of distance. --> more accuruate
     # for ex, if distance to earth < SOI --> central body = earth 

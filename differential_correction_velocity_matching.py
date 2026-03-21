@@ -27,6 +27,12 @@ k = Sun.k
 """
 Functions
 """
+
+from Vel_matching_attempt3 import*
+
+correction_nbody_prop = np.load('correction_nbody_prop.npz', allow_pickle=True)[()]
+print(f" position vectors: {correction_nbody_prop['r_sats']}")
+print(f" velocity vectors: {correction_nbody_prop['v_sats']}")
 # -------------------------------------------------------------------------------------------------------------FUNCTIONS-----------------------------------------------------------------------------------------------------------------
 
 # Sets up single Runge Kutta 4 Step

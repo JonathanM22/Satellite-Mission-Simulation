@@ -750,25 +750,51 @@ def sphere_of_influence(body, sun_mu):
 earth_soi = sphere_of_influence(earth, SUN_MU)
 mars_soi = sphere_of_influence(mars, SUN_MU)
 
+# -----------------------------------------------------------------------------------------------------------Propagation--------------------------------------------------------------------------------------------------------------
+
 # now need to add some sort of central body decider
 
-# -----------------------------------------------------------------------------------------------------------Propagation--------------------------------------------------------------------------------------------------------------
 central_body = sun
 bodies = [mercury,venus,jupiter,saturn,uranus,neptune]
 fun_arg = [central_body,bodies]
+
+# aiming for arbritary parking orbit periapsis
+mars_parking = Orbit(mu=MARS_MU,
+                      a=(400+3396)*u.km,
+                      e=0.0*u.km/u.km,  # unitless
+                      f0=(0*u.deg).to(u.rad),
+                      inc=(20*u.deg).to(u.rad),
+                      raan=(55*u.deg).to(u.rad),
+                      aop=(140*u.deg).to(u.rad)
+                      )
+
+r2_mars_parking = mars_parking.r_at_true_anomaly(mars_parking.f0).value
+
+r_pwq, v_pqw = orb_2_pqw(r2_mars_parking,
+                            mars_parking.f0.value, mars_parking.e.value,    
+                            mars_parking.p.value, mars_parking.mu.value)
+
+r_eci, v_eci = perif_2_eci(r_pwq, v_pqw, mars_parking.inc.value,
+                            mars_parking.raan,
+                            mars_parking.aop)
+
+r_sat_mars_helio = r2_mars + (eci_to_ecliptic @ r_eci)
+
 # _, _, ys = propagate_rk4(sat.r0.value, sat.v0.value, t0, tf, dt, fun_arg)
 dt = TimeDelta(3600, format='sec')
 r_sats, v_sats, _ = propagate_rk4(r1_sat_helio, transfer_v1_from_parking, departure_date, arrival_date, dt, fun_arg=fun_arg)
+r_mars_miss = r_sats[-1] - r_sat_mars_helio
 
-r_mars_miss = r_sats[-1] - r2_mars
 print(f'Satellite Missed Mars Target by {np.linalg.norm(r_mars_miss):.5f} km')
-# np.float64(152919.23711579296) km. not bad for first guess. Will need now to work on b plane targetting. 
 
-np.save('correction_nbody_prop.npz', { 'r_sats': r_sats, 'v_sats': v_sats})
 
-correction_nbody_prop = np.load('correction_nbody_prop.npz', allow_pickle=True)[()]
-r_sats = correction_nbody_prop['r_sats']
-v_sats = correction_nbody_prop['v_sats']
+
+# np.float64(152919.23711579296) km. not bad for first guess. Will need now to work on b plane targetting.
+
+np.save('correction_nbody_prop', { 'r_sats': r_sats, 'v_sats': v_sats})
+correction_nbody_prop = np.load('correction_nbody_prop.npy', allow_pickle=True)[()]
+print(f" position vectors:\n{correction_nbody_prop['r_sats']}\n")
+print(f" velocity vectors:\n {correction_nbody_prop['v_sats']}\n")
 
 # also want to implement a way to consider the sphere of influence, and change what the central body is as a funciton of distance. --> more accuruate
     # for ex, if distance to earth < SOI --> central body = earth 
@@ -776,6 +802,31 @@ v_sats = correction_nbody_prop['v_sats']
     # if the distance to mars < SOI mars --> central body = mars, etc.
 # I also have to account for earths gravity within its SOI and mars' gravity within its SOI --> so the list of bodies and central has to change
 
-# what i did  is kind of a short cut where I used the predetermined Vinf from lamberts to reconstruct the vinf vector from parking orbit. Ideally I should be propagting the post dV velocity to a point where earth gravity is negligable to get the true vinf vector 
-# --> will figure that out next. 
+# what i did is kind of a short cut where I used the predetermined Vinf from lamberts to reconstruct the vinf vector from parking orbit. Ideally I should be propagting the post dV velocity to a point where earth gravity is negligable to get the true vinf vector 
+# --> will figure that out next.  Thats what i did in differential_correction_velocity_matching --> I still used magnitude of v_inf_mag, but got the direction from propogating the post burn velocity to a point where earths gravity is negligible, then constructed the vinf vector from that direction and the magnitude from lamberts, then added earths velocity to get the transfer_v1 vector to compare with lamberts.
+
+# ---------------------------------------------------------------------------------------------------=----B-plane Targetting-------=---------------------------------------------------------------------------------------------------
+
+'''
+plan for b plane targetting:
+    - some notes for myself: the B plane is a plane orthogonal/normal to the hyperbolic trajectory plane ( the incoming asymptote) and the initial hyperbolic excess velocity vector. 
+        - normal to the vinf vector 
+    - it allows s/c to have some specific hyperbolic trajectory for flyby or in our case: orbit capture
+        B vector vector from target body COM to where the vinf hits b plane
+
+     -B plane defined by 3 unit vectors: S, T, R and the B vector which lies in the plane defined by T & R, and the vertex angle between the B vector and the T vector 
+    - S = unit vecotr in the direction of the hyperbolic excess velocity vector --> Vinf_arrival at the entry of SOI
+        - S_hat is in perifocal cords of the planet
+            - S_hat * P = -Pcos(f_inf) where cos(f_inf) = -mu/P
+                - P = vector constant of integration in the direction of the hyperbola vertex (periapsis in perifocal frame --> like eccentricity): abs(P) = -Vinf^2 *ae
+
+    - T = unit vector orthogonal to the S_hat and the normal of the planet. typically on the ecliptic plane of the solar system
+    - R = unit vector: cross product S x T
+
+    - B vector points from center of planet to the point at which the incoming asymptote of a spacecrafts hyperbolic trajectory pierces the B plane
+
+Need to set up Mars Parking orbit 
+--> need to iterate kinda like we did here where we need to define a position we want to be at --> iterate on either a dv manuever and or parking orbit to satisfy 
+
+'''
 

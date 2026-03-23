@@ -80,6 +80,50 @@ def perif_2_eci_DCM( inc, raan, aop):
 
     return perif_2_eci_DCM 
 
+def convert_state_earth_to_helio(r_eci, v_eci,t):
+    #barycentric:
+    r_earth_bary, v_earth_bary = get_body_barycentric_posvel('earth', t)
+    r_sun_bary, v_sun_bary = get_body_barycentric_posvel('sun', t)
+    #heliocentric: 
+    r_earth_helio = (r_earth_bary.xyz - r_sun_bary.xyz).to(u.km).value
+    v_earth_helio = (v_earth_bary.xyz - v_sun_bary.xyz).to(u.km/u.s).value
+    # Rotate ECI → ecliptic
+    earth_tilt = np.deg2rad(23.43928)
+    eci_to_ecl = np.array([
+        [1,  0,                   0                 ],
+        [0,  np.cos(earth_tilt), -np.sin(earth_tilt)],
+        [0,  np.sin(earth_tilt),  np.cos(earth_tilt)]
+    ])
+    # transform
+    r_sat_ecl = eci_to_ecl @ r_eci          # satellite pos wrt Earth, in ecliptic
+    v_sat_ecl = eci_to_ecl @ v_eci          # satellite vel wrt Earth, in ecliptic
+    # sat state wrt sun in ecliptic frame
+    r_helio = r_earth_helio + r_sat_ecl     # satellite pos wrt Sun, ecliptic
+    v_helio = v_earth_helio + v_sat_ecl     # satellite vel wrt Sun, ecliptic
+    return r_helio, v_helio
+
+def convert_state_helio_to_mars(r_helio, v_helio,t):
+    #barycentric:
+    r_mars_bary, v_mars_bary = get_body_barycentric_posvel('mars', t)
+    r_sun_bary, v_sun_bary = get_body_barycentric_posvel('sun', t)
+    #heliocentric: 
+    r_mars_helio = (r_mars_bary.xyz - r_sun_bary.xyz).to(u.km).value
+    v_mars_helio = (v_mars_bary.xyz - v_sun_bary.xyz).to(u.km/u.s).value
+    # Rotate ecliptic --> MCI
+    mars_tilt = np.deg2rad(25.19)
+    ecl_to_mci = np.array([
+        [1,  0,                   0                 ],
+        [0,  np.cos(mars_tilt), np.sin(mars_tilt)],
+        [0,  -np.sin(mars_tilt),  np.cos(mars_tilt)]
+    ])
+    # position vector from mars in ecl fraem
+    r_sat_mars = r_helio - r_mars_helio
+    v_sat_mars = v_helio - v_mars_helio
+    # transform
+    r_mci = ecl_to_mci @ r_sat_mars
+    v_mci = ecl_to_mci @ v_sat_mars
+    return r_mci, v_mci
+
 # Two body motion ODE: creating the y_dot function for n-body with ephemeris data
 def y_dot_n_ephemeris(t, y, fun_arg: list):
     """
@@ -750,7 +794,7 @@ def sphere_of_influence(body, sun_mu):
 earth_soi = sphere_of_influence(earth, SUN_MU)
 mars_soi = sphere_of_influence(mars, SUN_MU)
 
-# -----------------------------------------------------------------------------------------------------------Propagation--------------------------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------N-body Propagation of Parking Orbit post Delta V--------------------------------------------------------------------------------------------
 
 # now need to add some sort of central body decider
 
@@ -770,26 +814,23 @@ mars_parking = Orbit(mu=MARS_MU,
 
 r2_mars_parking = mars_parking.r_at_true_anomaly(mars_parking.f0).value
 
-r_pwq, v_pqw = orb_2_pqw(r2_mars_parking,
+r2_pwq, v2_pqw = orb_2_pqw(r2_mars_parking,
                             mars_parking.f0.value, mars_parking.e.value,    
                             mars_parking.p.value, mars_parking.mu.value)
 
-r_eci, v_eci = perif_2_eci(r_pwq, v_pqw, mars_parking.inc.value,
+r2_mci, v2_mci = perif_2_eci(r2_pwq, v2_pqw, mars_parking.inc.value,
                             mars_parking.raan,
                             mars_parking.aop)
 
-r_sat_mars_helio = r2_mars + (eci_to_ecliptic @ r_eci)
+r_sat_mars_helio = r2_mars + (eci_to_ecliptic @ r2_mci)
 
 # _, _, ys = propagate_rk4(sat.r0.value, sat.v0.value, t0, tf, dt, fun_arg)
 dt = TimeDelta(3600, format='sec')
 r_sats, v_sats, _ = propagate_rk4(r1_sat_helio, transfer_v1_from_parking, departure_date, arrival_date, dt, fun_arg=fun_arg)
+# r_mars_miss = r_sats[-1] - r2_mars # np.float64(152919.23711579296) km. not bad for first guess. Will need now to work on b plane targetting.
 r_mars_miss = r_sats[-1] - r_sat_mars_helio
-
-print(f'Satellite Missed Mars Target by {np.linalg.norm(r_mars_miss):.5f} km')
-
-
-
-# np.float64(152919.23711579296) km. not bad for first guess. Will need now to work on b plane targetting.
+print(f'Satellite Missed Mars Target by {np.linalg.norm(r_mars_miss):.5f} km\n')
+# Satellite Missed Mars Target by 149548.60523 km --> after aiming for parking orbit
 
 np.save('correction_nbody_prop', { 'r_sats': r_sats, 'v_sats': v_sats})
 correction_nbody_prop = np.load('correction_nbody_prop.npy', allow_pickle=True)[()]
@@ -828,5 +869,14 @@ plan for b plane targetting:
 Need to set up Mars Parking orbit 
 --> need to iterate kinda like we did here where we need to define a position we want to be at --> iterate on either a dv manuever and or parking orbit to satisfy 
 
+2  approaches: 
+
+    1. iterate on the transfer V1 from departure: Perturb transfer_v1, propagate n-body to Mars SOI, measure B-plane error, iterate with Newton's method.
+    2. Apply a small dV somewhere along the transfer, iterate on that [dvx, dvy, dvz] to minimize B-plane error.
+
+    For both, need to extract the point wherein the n-body propagtor outputs the position & velocity of the s/c when entering MARS SOi
+
 '''
+
+# target position vector: r_sat_mars_helio
 

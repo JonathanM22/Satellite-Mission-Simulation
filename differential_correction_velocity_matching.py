@@ -911,8 +911,8 @@ def convert_state_helio_to_mars(r_helio, v_helio,t):
     mars_tilt = np.deg2rad(25.19)
     ecl_to_mci = np.array([
         [1,  0,                   0                 ],
-        [0,  np.cos(mars_tilt), np.sin(mars_tilt)],
-        [0,  -np.sin(mars_tilt),  np.cos(mars_tilt)]
+        [0,  np.cos(mars_tilt), -np.sin(mars_tilt)],
+        [0,  np.sin(mars_tilt),  np.cos(mars_tilt)]
     ])
     # position vector from mars in ecl fraem
     r_sat_mars = r_helio - r_mars_helio
@@ -1019,7 +1019,9 @@ Nbody_prop = variable_nbody_propagtion(r_eci,v_postburn_eci,earth_soi, mars_soi,
 r_leg1 = Nbody_prop['Leg 1 Earth Central']['r']   # ECI, wrt Earth
 r_leg2 = Nbody_prop['Leg 2 Heliocentric']['r']   # heliocentric ecliptic, wrt Sun
 r_leg3 = Nbody_prop['Leg 3 Mars Central']['r']   # MCI, wrt Mars
-
+v_leg1 = Nbody_prop['Leg 1 Earth Central']['v']
+v_leg2 = Nbody_prop['Leg 2 Heliocentric']['v']
+v_leg3 = Nbody_prop['Leg 3 Mars Central']['v']
 mars_parking = Orbit(mu=MARS_MU,
                       a=(400+3396)*u.km,
                       e=0.0*u.km/u.km,  # unitless
@@ -1035,13 +1037,17 @@ r2_pwq, v2_pqw = orb_2_pqw(r2_mars_parking,
                             mars_parking.p.value, mars_parking.mu.value)
 r2_mci, v2_mci = perif_2_eci(r2_pwq, v2_pqw, mars_parking.inc.value,
                             mars_parking.raan,
-                            mars_parking.aop)
+                            mars_parking.aop)  # WOAHHHHHH usign periforcal to ECI !?!?!? change it so its wrt mars MCI not ECI --> diff orientation
 mars_miss = np.linalg.norm(r2_mci - r_leg3[-1])
 print(f'Missed target Mars parking orbit Periapsis by {mars_miss} km')
 
 # possible reasons for miss of 580k km: 
     # frame mismatch
     # check dcm signs
+
+#extracting elements when crossing mars SOI
+vinf_arrival_nbody = v_leg3[1]
+r_mars_soi_nbody = r_leg3[1]
 
 # ---------------------------------------------------------------------------------------------------=----B-plane Targetting-------=---------------------------------------------------------------------------------------------------
 
@@ -1075,6 +1081,60 @@ Need to set up Mars Parking orbit
 '''
 
 # target position vector: r_sat_mars_helio
+
+def Bplane(r_soi_cross, vinf_arrival,mars_mu):
+    
+    # equations from ai soln
+    s_hat = vinf_arrival/np.linalg.norm(vinf_arrival)
+    N = np.array([0,0,1])
+    t_hat = np.cross(s_hat,N)/np.linalg.norm(np.cross(s_hat,N))
+    r_hat = np.cross(s_hat,t_hat)
+
+    e = 1/mars_mu * ((np.linalg.norm(vinf_arrival))**2 * r_soi_cross - np.dot(r_soi_cross,vinf_arrival)*vinf_arrival) - r_soi_cross/np.linalg.norm(r_soi_cross)
+    h_hat = np.cross(r_soi_cross,vinf_arrival)/np.linalg.norm(np.cross(r_soi_cross,vinf_arrival))   
+    a = -mars_mu/vinf_arrival**2
+
+    Bmag = np.abs(a)*np.sqrt(e**2-1)
+    Bvector = Bmag * np.cross(s_hat,h_hat)              
+    print(f'B vector from freeflyer {Bvector}\n')
+
+    return Bvector
+
+
+#ig another way is to target the orbit periapsis radius from the UC boulder paper
+
+def Bplane2(r_soi_cross,vinf_arrival,mars_mu):
+
+    # all the vectors are in the perifocal frame 
+
+    # s_hat = -[cos(finf) *P_hat + sin(finf)*Q_hat]
+    # P points in the direcion of periapsis --> Eccentricity
+
+    h_hat = np.cross(r_soi_cross,vinf_arrival)/np.linalg.norm(np.cross(r_soi_cross,vinf_arrival))   
+    e = 1/mars_mu * ((np.linalg.norm(vinf_arrival))**2 * r_soi_cross - np.dot(r_soi_cross,vinf_arrival)*vinf_arrival) - r_soi_cross/np.linalg.norm(r_soi_cross)
+    
+    a = -mars_mu/vinf_arrival**2
+    P = -vinf_arrival**2 * a * e
+    P_hat = e/np.linalg.norm(e)
+    h=np.cross(r_soi_cross,vinf_arrival)
+    Q = np.cross(h,e)
+    Q_hat = Q/np.linalg.norm(Q)
+
+    # cos(finf) = -1/e
+    # sin(finf) = sqrt(1-(1/e^2))
+
+    s_hat = -(-1/e * P_hat - np.sqrt(1-(1/e**2)) * Q_hat)
+
+    B_vec=vinf_arrival*np.cross(s_hat,h)
+    B = np.linalg.norm(B_vec)
+    print(f'B vector from UC boulder {B_vec}')
+    rp = -mars_mu/vinf_arrival**2 + np.sqrt((mars_mu/vinf_arrival**2)**2 + B**2)
+    
+    return rp
+
+
+Bvector = Bplane(r_mars_soi_nbody,vinf_arrival_nbody,MARS_MU.value)
+rp = Bplane2(r_mars_soi_nbody,vinf_arrival_nbody,MARS_MU.value)
 
 
 

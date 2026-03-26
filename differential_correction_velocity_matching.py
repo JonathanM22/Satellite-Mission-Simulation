@@ -1082,17 +1082,20 @@ Need to set up Mars Parking orbit
 
 # target position vector: r_sat_mars_helio
 
-def Bplane(r_soi_cross, vinf_arrival,mars_mu):
+def Bplane(r_soi_cross, vinf_arrival_vec,mars_mu):
     
+    vinf_arrival = np.linalg.norm(vinf_arrival_vec)
     # equations from ai soln
-    s_hat = vinf_arrival/np.linalg.norm(vinf_arrival)
+    s_hat = vinf_arrival_vec/np.linalg.norm(vinf_arrival_vec)
+    print(f's_hat = {s_hat}')
     N = np.array([0,0,1])
     t_hat = np.cross(s_hat,N)/np.linalg.norm(np.cross(s_hat,N))
     r_hat = np.cross(s_hat,t_hat)
 
-    e = 1/mars_mu * ((np.linalg.norm(vinf_arrival))**2 * r_soi_cross - np.dot(r_soi_cross,vinf_arrival)*vinf_arrival) - r_soi_cross/np.linalg.norm(r_soi_cross)
-    h_hat = np.cross(r_soi_cross,vinf_arrival)/np.linalg.norm(np.cross(r_soi_cross,vinf_arrival))   
-    a = -mars_mu/vinf_arrival**2
+    e_vec = 1/mars_mu * (vinf_arrival**2 * r_soi_cross - np.dot(r_soi_cross,vinf_arrival_vec)*vinf_arrival_vec) - r_soi_cross/np.linalg.norm(r_soi_cross)
+    e = np.linalg.norm(e_vec)
+    h_hat = np.cross(r_soi_cross,vinf_arrival_vec)/np.linalg.norm(np.cross(r_soi_cross,vinf_arrival_vec))   
+    a = -mars_mu/(vinf_arrival**2)
 
     Bmag = np.abs(a)*np.sqrt(e**2-1)
     Bvector = Bmag * np.cross(s_hat,h_hat)              
@@ -1103,29 +1106,35 @@ def Bplane(r_soi_cross, vinf_arrival,mars_mu):
 
 #ig another way is to target the orbit periapsis radius from the UC boulder paper
 
-def Bplane2(r_soi_cross,vinf_arrival,mars_mu):
+def Bplane2(r_soi_cross,vinf_arrival_vec,mars_mu):
+
+    vinf_arrival = np.linalg.norm(vinf_arrival_vec)
 
     # all the vectors are in the perifocal frame 
 
     # s_hat = -[cos(finf) *P_hat + sin(finf)*Q_hat]
     # P points in the direcion of periapsis --> Eccentricity
-
-    h_hat = np.cross(r_soi_cross,vinf_arrival)/np.linalg.norm(np.cross(r_soi_cross,vinf_arrival))   
-    e = 1/mars_mu * ((np.linalg.norm(vinf_arrival))**2 * r_soi_cross - np.dot(r_soi_cross,vinf_arrival)*vinf_arrival) - r_soi_cross/np.linalg.norm(r_soi_cross)
+    h = np.cross(r_soi_cross, vinf_arrival_vec)
+    h_hat = h / np.linalg.norm(h)    
     
+    e_vec = (1/mars_mu) * (vinf_arrival**2 * r_soi_cross - np.dot(r_soi_cross,vinf_arrival_vec)*vinf_arrival_vec) - r_soi_cross/np.linalg.norm(r_soi_cross)
+    e = np.linalg.norm(e_vec)       
+
     a = -mars_mu/vinf_arrival**2
-    P = -vinf_arrival**2 * a * e
-    P_hat = e/np.linalg.norm(e)
-    h=np.cross(r_soi_cross,vinf_arrival)
-    Q = np.cross(h,e)
+    P_mag = mars_mu * e # same as -vinf**2 * a *e
+    P_hat = e_vec/e
+    P = P_mag * P_hat
+
+    Q = np.cross(h,P)
     Q_hat = Q/np.linalg.norm(Q)
 
-    # cos(finf) = -1/e
-    # sin(finf) = sqrt(1-(1/e^2))
+    cos_finf = -mars_mu/P_mag
+    sin_finf = -1*np.sqrt(1-(mars_mu/P_mag)**2)
 
-    s_hat = -(-1/e * P_hat - np.sqrt(1-(1/e**2)) * Q_hat)
+    s_hat = -(cos_finf * P_hat + sin_finf * Q_hat)
+    print(f's_hat = {s_hat}')
 
-    B_vec=vinf_arrival*np.cross(s_hat,h)
+    B_vec= (1/vinf_arrival) * np.cross(s_hat,h)
     B = np.linalg.norm(B_vec)
     print(f'B vector from UC boulder {B_vec}')
     rp = -mars_mu/vinf_arrival**2 + np.sqrt((mars_mu/vinf_arrival**2)**2 + B**2)
@@ -1136,5 +1145,5 @@ def Bplane2(r_soi_cross,vinf_arrival,mars_mu):
 Bvector = Bplane(r_mars_soi_nbody,vinf_arrival_nbody,MARS_MU.value)
 rp = Bplane2(r_mars_soi_nbody,vinf_arrival_nbody,MARS_MU.value)
 
-
+abc=123
 

@@ -760,14 +760,14 @@ def sensitivity_matrix(orbit, v_inf_mag, x, dt_raan, dt_aop, v1_earth,f_x):
 
     return np.block([dt_raan_col, dt_aop_col])
 
-raan0 = np.deg2rad(123.355471)
-aop0 = np.deg2rad(226.091122)
+raan0 = np.deg2rad(123.3554717122768)
+aop0 = np.deg2rad(226.0911222900096)
 
 x0 = np.array([raan0, aop0]).reshape(2, 1)
 y0 = sat_orbit_targeting(earth_parking, Vinf_departure_mag, x0,v1_earth)
 
-dt_raan = np.deg2rad(.00001)
-dt_aop = np.deg2rad(.00001)
+dt_raan = np.deg2rad(.001)
+dt_aop = np.deg2rad(.001)
 
 i = 0
 max_i = 20000
@@ -933,24 +933,29 @@ def variable_nbody_propagtion(r0, v0, earth_soi, mars_soi, t0, tf):
       y = RK4_single_step(y_dot_n_ephemeris, dt, t, np.concatenate([r_eci,v_eci]), fun_arg)
       r_eci = y[:3]
       v_eci = y[3:6]
+    
+      t_curr = t
       t = t + dt
 
       pos_vecs.append(r_eci.copy())
       vel_vecs.append(v_eci.copy())
-      t_vals.append(t)
+      t_vals.append(t_curr)
 
       if np.linalg.norm(r_eci) > earth_soi:
-         print(f'Satellite Crossed Earth SOI at r = {np.linalg.norm(r_eci)} km from earth on {t.iso}\n')
+         print(f'Satellite Crossed Earth SOI at r = {np.linalg.norm(r_eci)} km from earth on {t_curr.iso}\n')
          break
+
     results['Leg 1 Earth Central'] = {'r':pos_vecs, 'v':vel_vecs, 't': t_vals}
 
 
     # ───────────────────────────────────────────────Phase 2: Sun-centered ───────────────────────────────────────────────
     print('Beginning Leg 2: Propagating until Mars SOI: Heliocentric')
-    r,v = convert_state_earth_to_helio(r_eci,v_eci,t)
+    r,v = convert_state_earth_to_helio(r_eci,v_eci,t_curr)
     central_body = sun 
     perturbing = [mercury ,venus, earth,moon, mars, jupiter, saturn, uranus,neptune]
     fun_arg = [central_body,perturbing]
+
+    t = t_curr
     r_helio , v_helio = r.copy() , v.copy()
     print("Injected v:", v_helio)
     
@@ -961,20 +966,22 @@ def variable_nbody_propagtion(r0, v0, earth_soi, mars_soi, t0, tf):
       y = RK4_single_step(y_dot_n_ephemeris, dt, t, np.concatenate([r_helio,v_helio]), fun_arg)
       r_helio = y[:3]
       v_helio = y[3:6]
-      t = t + dt
-
+      t_curr = t
+      t = t + dt # for next iteration step
       pos_vecs.append(r_helio.copy())
       vel_vecs.append(v_helio.copy())
-      t_vals.append(t)
+      t_vals.append(t_curr)
 
-      r_mars_current,_ = get_body_barycentric_posvel('mars',t)
-      r_sun_current,_ = get_body_barycentric_posvel('sun',t)
+      r_mars_current,_ = get_body_barycentric_posvel('mars',t_curr)
+      r_sun_current,_ = get_body_barycentric_posvel('sun',t_curr)
       r_mars_helio = (r_mars_current.xyz - r_sun_current.xyz).to(u.km).value # dist from sun to mars
       sat_mars_dist = np.linalg.norm(r_helio - r_mars_helio)
       
       if sat_mars_dist < mars_soi:
-        print(f'Satellite Crossed Mars SOI at r = {sat_mars_dist} km from Mars on {t.iso}\n')
+        print(f'Satellite Crossed Mars SOI at r = {sat_mars_dist} km from Mars on {t_curr.iso}\n')
         break
+      
+
       if t >= tf:
         miss = np.linalg.norm(sat_mars_dist)
         print(f"WARNING: reached tf. Closest approach to Mars: {miss:.0f} km "
@@ -985,10 +992,12 @@ def variable_nbody_propagtion(r0, v0, earth_soi, mars_soi, t0, tf):
 
     # ───────────────────────────────────────────────Phase 3: Mars-centered ───────────────────────────────────────────────
     print('Beginning Leg 3: Propagating until Arrival Date/time: Mars Centered')
-    r,v = convert_state_helio_to_mars(r_helio,v_helio,t)  
+    r,v = convert_state_helio_to_mars(r_helio,v_helio,t_curr)  
     central_body = mars
     perturbing = [mercury ,venus, earth, moon, jupiter, saturn, uranus,neptune, sun]
     fun_arg = [central_body,perturbing]
+
+    t = t_curr
     r_mci , v_mci = r.copy() , v.copy()
     print("After switch:", r, v)
 
@@ -999,11 +1008,12 @@ def variable_nbody_propagtion(r0, v0, earth_soi, mars_soi, t0, tf):
        y = RK4_single_step(y_dot_n_ephemeris ,dt ,t ,np.concatenate([r_mci,v_mci]),fun_arg)
        r_mci = y[:3]
        v_mci = y[3:6]
+       t_curr = t
        t = t+dt
 
        pos_vecs.append(r_mci.copy())
        vel_vecs.append(v_mci.copy())
-       t_vals.append(t)
+       t_vals.append(t_curr)
     results['Leg 3 Mars Central'] = {'r':pos_vecs, 'v':vel_vecs, 't': t_vals}
     return results
 

@@ -441,7 +441,6 @@ def find_optimal_solution(results, weight_C3, weight_Vinf):
 optimal_C3, optimal_Vinf_departure, optimal_Vinf_arrival, optimal_transfer_v1,r2_mars,v2_mars, arrival_date = find_optimal_solution(results, weight_C3=0.75, weight_Vinf=0.25)
 C3 = optimal_C3
 
-# V infinty departure and arrival vectors derived from lamberts: remember these are in the heliocentric ecliptic frame
 Vinf_departure = optimal_Vinf_departure #*(u.km/u.s)
 Vinf_arrival = optimal_Vinf_arrival #*(u.km/u.s)
 transfer_v1 = optimal_transfer_v1
@@ -473,25 +472,6 @@ Vinf_departure_mag = np.linalg.norm(optimal_Vinf_departure) #*(u.km/u.s)
 
 # -----------------------------------------------------------------------------------------------------------Parking Orbits------------------------------------------------------------------------------------------------------------
 
-# All heliocentric position and velocity vectors are in the ecliptic frame, so we need to convert the vinf departure vector to the ECI frame to get the correct RAAN and declination for the parking orbit targeting
-# Convert V_infinity from ecliptic to ECI frame
-earth_tilt = np.deg2rad(23.43928)
-
-# Rotation matrix: ecliptic → ECI
-ecliptic_to_eci = np.array([
-    [1, 0, 0],
-    [0, np.cos(earth_tilt), np.sin(earth_tilt)],
-    [0, -np.sin(earth_tilt), np.cos(earth_tilt)]
-])
-
-eci_to_ecliptic = np.array([
-    [1, 0, 0],
-    [0, np.cos(earth_tilt), -np.sin(earth_tilt)],
-    [0, np.sin(earth_tilt), np.cos(earth_tilt)]
-])
-
-Vinf_departure_eci = ecliptic_to_eci @ Vinf_departure  # array([-2.29252952,  2.189834  ,  0.38596186])
-
 # Define Earth Parking Orbit
 earth_parking = Orbit(mu=EARTH_MU,
                       a=(400+6378)*u.km,
@@ -517,38 +497,27 @@ mars_parking = Orbit(mu=MARS_MU,
 # Numerically converged Transfer Velocity V1: [-15.49455038  26.46753395  11.89308889]
 
 def convert_state_earth_to_helio(r_eci, v_eci,t):
-    #barycentric:
+    # Everything here is ICRS. 'eci' is just a label for 'Earth-Relative ICRS':
     r_earth_bary, v_earth_bary = get_body_barycentric_posvel('earth', t)
     r_sun_bary, v_sun_bary = get_body_barycentric_posvel('sun', t)
-    #heliocentric: 
+    #Vector from Sun to Earth in ICRS
     r_earth_helio = (r_earth_bary.xyz - r_sun_bary.xyz).to(u.km).value
     v_earth_helio = (v_earth_bary.xyz - v_sun_bary.xyz).to(u.km/u.s).value
-    # Rotate ECI → ecliptic
-    earth_tilt = np.deg2rad(23.43928)
-    eci_to_ecl = np.array([
-        [1,  0,                   0                 ],
-        [0,  np.cos(earth_tilt), -np.sin(earth_tilt)],
-        [0,  np.sin(earth_tilt),  np.cos(earth_tilt)]
-    ])
-    # transform
-    r_sat_ecl = eci_to_ecl @ r_eci          # satellite pos wrt Earth, in ecliptic
-    v_sat_ecl = eci_to_ecl @ v_eci          # satellite vel wrt Earth, in ecliptic
-    # sat state wrt sun in ecliptic frame
-    r_helio = r_earth_helio + r_sat_ecl     # satellite pos wrt Sun, ecliptic
-    v_helio = v_earth_helio + v_sat_ecl     # satellite vel wrt Sun, ecliptic
+    # Sat position wrt Sun = (Sun->Earth) + (Earth->Sat)
+    r_helio = r_earth_helio + r_eci     # satellite pos wrt Sun, ecliptic
+    v_helio = v_earth_helio + v_eci     # satellite vel wrt Sun, ecliptic
     return r_helio, v_helio
 
 def convert_state_helio_to_mars(r_helio, v_helio,t):
-    #barycentric:
+    # Everything here is ICRS
     r_mars_bary, v_mars_bary = get_body_barycentric_posvel('mars', t)
     r_sun_bary, v_sun_bary = get_body_barycentric_posvel('sun', t)
-    #heliocentric: 
+    #Vector from Sun to Mars in ICRS: 
     r_mars_helio = (r_mars_bary.xyz - r_sun_bary.xyz).to(u.km).value
     v_mars_helio = (v_mars_bary.xyz - v_sun_bary.xyz).to(u.km/u.s).value
-    # position vector from mars in ecl fraem
+    # Sat position wrt Sun = (Sun->Mars) - (Sun->Mars) 
     r_sat_mars = r_helio - r_mars_helio
     v_sat_mars = v_helio - v_mars_helio
-  
     return r_sat_mars , v_sat_mars
 
 #leg based fraemwork --> resolve rk4 single step and calculate until it hits respecitve SOI's --. changes central bodies
@@ -581,25 +550,25 @@ def variable_nbody_propagtion(r0, v0, earth_soi, mars_soi, t0, tf):
 
       if np.linalg.norm(r_eci) > earth_soi:
          print(f'Satellite Crossed Earth SOI at r = {np.linalg.norm(r_eci)} km from earth on {t_curr.iso}\n')
+         t = t_curr # reset t to the time of crossing SOI for next leg
          break
 
     results['Leg 1 Earth Central'] = {'r':pos_vecs, 'v':vel_vecs, 't': t_vals}
 
 
-    # ───────────────────────────────────────────────Phase 2: Sun-centered ───────────────────────────────────────────────
+        # ───────────────────────────────────────────────Phase 2: Sun-centered ───────────────────────────────────────────────
     print('Beginning Leg 2: Propagating until Mars SOI: Heliocentric')
-    r,v = convert_state_earth_to_helio(r_eci,v_eci,t_curr)
+    r,v = convert_state_earth_to_helio(r_eci,v_eci,t)
     central_body = sun 
     perturbing = [mercury ,venus, earth,moon, mars, jupiter, saturn, uranus,neptune]
     fun_arg = [central_body,perturbing]
 
-    t = t_curr
     r_helio , v_helio = r.copy() , v.copy()
     print("Injected v:", v_helio)
-    
+    #Injected v: [-16.58054556  26.60949911  10.62554537]    
     pos_vecs, vel_vecs, t_vals = [r_helio.copy()], [v_helio.copy()],[t]
     dt = TimeDelta(3600, format='sec')
-
+    mars_miss = []
     while True:
       y = RK4_single_step(y_dot_n_ephemeris, dt, t, np.concatenate([r_helio,v_helio]), fun_arg)
       r_helio = y[:3]
@@ -614,19 +583,19 @@ def variable_nbody_propagtion(r0, v0, earth_soi, mars_soi, t0, tf):
       r_sun_current,_ = get_body_barycentric_posvel('sun',t_curr)
       r_mars_helio = (r_mars_current.xyz - r_sun_current.xyz).to(u.km).value # dist from sun to mars
       sat_mars_dist = np.linalg.norm(r_helio - r_mars_helio)
-      
+      mars_miss.append(sat_mars_dist)
       if sat_mars_dist < mars_soi:
         print(f'Satellite Crossed Mars SOI at r = {sat_mars_dist} km from Mars on {t_curr.iso}\n')
+        t = t_curr
         break
       
-
       if t >= tf:
-        miss = np.linalg.norm(sat_mars_dist)
-        print(f"WARNING: reached tf. Closest approach to Mars: {miss:.0f} km "
-            f"(Mars SOI = {mars_soi:.0f} km)")
+        current_miss = np.min(mars_miss)
+        print(f"WARNING: reached tf. Closest approach to Mars: {current_miss:.0f} km "f"(Mars SOI = {mars_soi:.0f} km)")
         break
     results['Leg 2 Heliocentric'] = {'r':pos_vecs, 'v':vel_vecs, 't': t_vals}
     print("Before switch:", r_helio, v_helio)
+
 
     # ───────────────────────────────────────────────Phase 3: Mars-centered ───────────────────────────────────────────────
     print('Beginning Leg 3: Propagating until Arrival Date/time: Mars Centered')
@@ -641,6 +610,8 @@ def variable_nbody_propagtion(r0, v0, earth_soi, mars_soi, t0, tf):
 
     pos_vecs, vel_vecs, t_vals = [r_mci.copy()], [v_mci.copy()],[t]
     dt = TimeDelta(60, format='sec')
+    r_dot_prev = np.dot(r_mci, v_mci) / np.linalg.norm(r_mci)  # radial velocity
+    periapsis_state = None
 
     while t < tf: 
        y = RK4_single_step(y_dot_n_ephemeris ,dt ,t ,np.concatenate([r_mci,v_mci]),fun_arg)
@@ -649,10 +620,23 @@ def variable_nbody_propagtion(r0, v0, earth_soi, mars_soi, t0, tf):
        t_curr = t
        t = t+dt
 
+       # we know that at mars periapsis: 
+          # r_mci should be the closest to mars surface i.e the minimum r value
+          # at periapsis, the velocity and position are perpendicular --> r dot v = 0 
+
+       r_dot_curr = np.dot(r_mci,v_mci)/np.linalg.norm(r_mci)
+
+       if r_dot_prev < 0 and r_dot_curr >= 0: 
+            print(f"Periapsis detected at t = {t_curr.iso} with r = {np.linalg.norm(r_mci):.3f} km and v = {np.linalg.norm(v_mci):.3f} km/s")
+            periapsis_state = (r_mci.copy(), v_mci.copy(), t_curr)
+            break
+    
+       r_dot_prev = r_dot_curr
+
        pos_vecs.append(r_mci.copy())
        vel_vecs.append(v_mci.copy())
        t_vals.append(t_curr)
-    results['Leg 3 Mars Central'] = {'r':pos_vecs, 'v':vel_vecs, 't': t_vals}
+    results['Leg 3 Mars Central'] = {'r':pos_vecs, 'v':vel_vecs, 't': t_vals, 'periapsis': periapsis_state}
     
     return results
 # ---------------------------------------------------------------------------------------------------=----B-plane Targetting-------=---------------------------------------------------------------------------------------------------
@@ -694,6 +678,16 @@ def Bplane2(r_soi_cross,vinf_arrival_vec,mars_mu):
     s_hat = -(cos_finf * P_hat + sin_finf * Q_hat)
     # print(f's_hat = {s_hat}')
     N = np.array([0,0,1])
+
+    '''
+     N = np.array([0,0,1]) Because you are in ICRS, this  vector points toward the Earth's North Pole.
+     While this is mathematically valid for defining a coordinate system,
+             most Mars mission planners define the B-plane relative to the Mars Orbital Plane or the Mars North Pole. 
+             Using the Earth's pole is fine for convergence, but your btheta value will be relative to Earth's equator, not the Martian landscape. 
+             Just something to keep in mind when interpreting your results!
+    
+    '''
+
     t_hat = np.cross(s_hat,N)/np.linalg.norm(np.cross(s_hat,N))
     r_hat = np.cross(s_hat,t_hat)
 
@@ -710,111 +704,150 @@ def Bplane2(r_soi_cross,vinf_arrival_vec,mars_mu):
     
     return rp,B_theta,BR,BT
 
+# ----------------------------------------------------------------------------------------Analytically Calculating the Earth-Vinfinity vector ------------------------------------------------------------------------------------------
+
+def calculate_vinf_departure(dV,orbit,hyp_parameter):
+
+    # parking orbit state
+    r_pqw, v_pqw = orb_2_pqw(orbit.r_at_true_anomaly(orbit.f0).value,orbit.f0.value, orbit.e.value,orbit.p.value, orbit.mu.value)
+    r_eci, v_eci = perif_2_eci(r_pqw, v_pqw, orbit.inc, orbit.raan, orbit.aop)
+    rp = orbit.a.value * (1-orbit.e.value)
+    vinf_deptarture = np.sqrt( (np.linalg.norm(v_eci) + dV)**2 - (2*orbit.mu.value/rp))
+
+    a_hyp = -orbit.mu.value/vinf_deptarture**2
+    e_hyp = 1 - (rp/a_hyp)
+
+    # v_PQW(f) = sqrt(mu/p) * [-sin(f), e + cos(f), 0]
+    # Substituting f = f_inf  (cos f = -1/e, sin f = sqrt(e^2-1)/e
+    vinf_pqw = vinf_deptarture * np.array([-1/e_hyp , np.sqrt(e_hyp**2-1)/e_hyp,0])
+
+    # raan, aop, and inc of hyperbolic orbit
+    inc_hyp = hyp_parameter[3]
+    raan_hyp = hyp_parameter[4]
+    aop_hyp = hyp_parameter[5]
+
+    _,vinf_eci = perif_2_eci(np.array([0,0,0]),vinf_pqw, inc_hyp, raan_hyp, aop_hyp)
+
+    return vinf_eci
+
+
+def hyperbolic_parameters(rp,v_postburn,orbit): 
+
+    h_vec = np.cross(rp,v_postburn)
+    h = np.linalg.norm(h_vec)
+    P = h**2/orbit.mu.value
+
+    e_vec = 1/orbit.mu.value * (np.linalg.norm(v_postburn)**2 * rp - np.dot(rp,v_postburn)*v_postburn) - rp/np.linalg.norm(rp)
+    e = np.linalg.norm(e_vec)
+    a = P/(e**2 -1)
+    
+    Node = np.array([0,0,1])
+    
+    inc = np.arccos(h_vec[2]/np.linalg.norm(h_vec))
+    N = np.cross(Node,h_vec)
+
+    if N[1] >= 0: 
+        raan  = np.arccos(N[0]/np.linalg.norm(N))
+    else: 
+        raan = 2*np.pi - np.arccos(N[0]/np.linalg.norm(N))
+
+    if e_vec[2] >= 0:
+        aop = np.arccos(np.dot(N,e_vec)/(np.linalg.norm(N)*np.linalg.norm(e_vec)))
+    else:
+        aop = 2*np.pi - np.arccos(np.dot(N,e_vec)/(np.linalg.norm(N)*np.linalg.norm(e_vec)))
+
+    hyp_parameter = np.array([a,e,P,inc, raan, aop])
+
+    return hyp_parameter
+
+def orbit_to_inertial_state(orbit):
+    r_pqw, v_pqw = orb_2_pqw(orbit.r_at_true_anomaly(orbit.f0).value,orbit.f0.value, orbit.e.value,orbit.p.value, orbit.mu.value)
+    r_eci, v_eci = perif_2_eci(r_pqw, v_pqw, orbit.inc, orbit.raan, orbit.aop)
+    return r_eci,v_eci
+
+# r_eci, v_eci = orbit_to_inertial_state(earth_parking)
+# dV0 = np.sqrt(Vinf_departure_mag**2 + (2*EARTH_MU.value/np.linalg.norm(r_eci))) - np.linalg.norm(v_eci)
+# v_postburn_eci = v_eci + (dV0 * (v_eci/np.linalg.norm(v_eci)))  # apply prograde delta 
+# hyp_parameters = hyperbolic_parameters(r_eci, v_postburn_eci, earth_parking)
+# vinf_eci = calculate_vinf_departure(dV0, earth_parking, hyp_parameters)
+# print(f'Calculated Vinf departure vector from analytical function: {vinf_eci} km')
 
 # -------------------------------------------------------------------------------Step 3:Differential Correction: targetting B_theta and R_mars_periapsis ------------------------------------------------------------------------------
 
 # Guess X → propagate → detect periapsis → compute B-plane → correct X
-def sat_orbit_targeting(orbit, x, departure_date, arrival_date, earth_soi, mars_soi):
+def sat_orbit_targeting(orbit, x,Vinf_departure):
+
     orbit.raan = x[0][0]
     orbit.aop  = x[1][0]
     dV         = x[2][0]
 
-    r_pqw, v_pqw = orb_2_pqw(orbit.r_at_true_anomaly(orbit.f0).value,
-                             orbit.f0.value, orbit.e.value,
-                             orbit.p.value, orbit.mu.value)
-    
-    r_eci, v_eci = perif_2_eci(r_pqw, v_pqw, orbit.inc, orbit.raan, orbit.aop)
-
+    r_eci, v_eci = orbit_to_inertial_state(orbit)
     v_postburn_eci = v_eci + (dV * (v_eci/np.linalg.norm(v_eci)))  # apply prograde delta V
+    hyp_parameters = hyperbolic_parameters(r_eci, v_postburn_eci, orbit)
+    vinf_eci = calculate_vinf_departure(dV, orbit, hyp_parameters)
+    return vinf_eci.reshape(3,1)
 
-    Nbody_prop = variable_nbody_propagtion(r_eci, v_postburn_eci,
-                                           earth_soi, mars_soi,
-                                           departure_date, arrival_date)
-    
-    '''
-        gonna rewrite this part to extract the state vectors at the perapsis crossing instead of soi crossing 
-            --> since we want to target the b plane parameters at mars periapsis not soi crossing
-     --> gonna use find min or something like that  
-    '''
-
-    '''
-    Use a stopping condition of Mars periapsis to stop the trajectory, and measure the B plane and radius. 
-    need to incorporate event-based periapsis stopping for your integrator, but thats the best way to do it.     
-    '''
-
-    r_mars_soi_nbody = Nbody_prop['Leg 3 Mars Central']['r'][0]
-    vinf_arrival_nbody = Nbody_prop['Leg 3 Mars Central']['v'][0]
-
-    # Bplane paramters at MARS soi crossing
-    rp,B_theta,BR,BT = Bplane2(r_mars_soi_nbody,vinf_arrival_nbody,MARS_MU.value)
-    # or f_x = np.array([BR , BT])
-    return np.array([rp, B_theta]).reshape(2, 1)
-
-
-def sensitivity_matrix(orbit, x, departure_date, arrival_date, earth_soi, mars_soi, dt_raan, dt_aop, dt_dV, f_x):
+def sensitivity_matrix(orbit, x,Vinf_departure, dt_raan, dt_aop, dt_dV, f_x):
     
     # Reshape dt_input args into dt vectors
     dt_rann_ar = np.array([dt_raan, 0,0]).reshape(3, 1)
     dt_aop_ar = np.array([0, dt_aop,0]).reshape(3, 1)
     dt_dV_ar = np.array([0, 0, dt_dV]).reshape(3, 1)
-    
     # equations from AGI newtons method paper 
-    dt_raan_col = (1/(dt_raan))*(sat_orbit_targeting( orbit, x + dt_rann_ar,departure_date, arrival_date, earth_soi, mars_soi) - f_x)
+    dt_raan_col = (1/(dt_raan))*(sat_orbit_targeting( orbit, x + dt_rann_ar,Vinf_departure) - f_x)
+    # Reset orbit to x before each call so state doesn't bleed between columns
     orbit.raan = x[0][0]  # reset
     orbit.aop  = x[1][0]  # reset
-    dt_aop_col = (1/(dt_aop))*(sat_orbit_targeting(orbit, x + dt_aop_ar,departure_date, arrival_date, earth_soi, mars_soi) - f_x)
+    dt_aop_col = (1/(dt_aop))*(sat_orbit_targeting(orbit, x + dt_aop_ar,Vinf_departure) - f_x)
     orbit.raan = x[0][0]  # reset
     orbit.aop  = x[1][0]  # reset
-    dt_dV_col = (1/(dt_dV))*(sat_orbit_targeting(orbit, x + dt_dV_ar,departure_date, arrival_date, earth_soi, mars_soi) - f_x)
+    dt_dV_col = (1/(dt_dV))*(sat_orbit_targeting(orbit, x + dt_dV_ar,Vinf_departure) - f_x)
     orbit.raan = x[0][0]  # reset
     orbit.aop  = x[1][0]  # reset
     return np.block([dt_raan_col, dt_aop_col, dt_dV_col])
 
 # ── Initial guess ──────────────────────────────────────────────────────────────
 
-raan0 = np.deg2rad(175)
+raan0 = np.deg2rad(175.0)
 aop0 = np.deg2rad(240)
-dV0 = 3.637
+orbit = earth_parking
+r_eci, v_eci = orbit_to_inertial_state(orbit)
+
+# vinf = sqrt( (v_eci + dV)^2 - (2*mu/rp)) 
+dV0 = np.sqrt(Vinf_departure_mag**2 + (2*EARTH_MU.value/np.linalg.norm(r_eci))) - np.linalg.norm(v_eci)
+dV0 = 3.55
 x0 = np.array([raan0, aop0,dV0]).reshape(3, 1)
-y0 = sat_orbit_targeting(earth_parking,x0,departure_date, arrival_date, earth_soi, mars_soi)
+y0 = sat_orbit_targeting(earth_parking,x0,Vinf_departure)
 
 dt_raan = np.deg2rad(.01)
 dt_aop = np.deg2rad(.01)
 dt_dV = .01
 
 # ── Targets ────────────────────────────────────────────────────────────────────
-
-rp_target      = 400.0 + 3396.0
-B_theta_target = np.deg2rad(30.0) # --> no idea what this is about might have to look into it
-y_d = np.array([rp_target, B_theta_target]).reshape(2, 1)  # change this to refelct what we want to target: either B plane parameters or mars periapsis distance 
-
+# y_d = np.array([rp_target, B_theta_target]).reshape(2, 1)  # change this to refelct what we want to target: either B plane parameters or mars periapsis distance 
+y_d = Vinf_departure.reshape(3,1) # target the vinfinity vector at arrival instead of b plane parameters
 # ── Tolerances ─────────────────────────────────────────────────────────────────
-
 i = 0
 max_i = 50
 x = x0
-rp_tol = 100
-Btheta_tol = np.deg2rad(.01)
-tol = np.array([rp_tol, Btheta_tol]).reshape(2, 1)
-error = y0 - y_d
+tol = np.array([10e-4, 10e-4, 10e-4]).reshape(3, 1)
+x = x0.copy()
 
 for i in range(max_i):
 
     orbit.raan = x[0][0]
     orbit.aop  = x[1][0]
 
-    # iter 1
-    f_x = sat_orbit_targeting(earth_parking, x, departure_date,arrival_date, earth_soi, mars_soi)
-    error = (f_x-y_d)
+    f_x = sat_orbit_targeting(earth_parking, x, Vinf_departure)
 
-    J = sensitivity_matrix(earth_parking, x, departure_date, arrival_date,earth_soi, mars_soi, dt_raan, dt_aop, dt_dV,f_x)    
+    error = (f_x-y_d)
+    J = sensitivity_matrix(earth_parking, x, Vinf_departure, dt_raan, dt_aop, dt_dV,f_x)    
     x_k = x - np.linalg.pinv(J)@(f_x-y_d)
 
     print(f"[{i}] ERROR:{error.flatten()}")
     print(f"Parking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = {np.rad2deg(x[1][0])} deg\n | dV = {x[2][0]:.3f} km/s\n")
 
     x = x_k
-
     i += 1
 
     if np.all(np.abs(error) < tol):
@@ -825,15 +858,22 @@ for i in range(max_i):
         print(f"[MAX ITER] ERROR:{error.flatten()}")
         break
     # x = x % (2*np.pi) # make sure raan and aop values are between 0 and 2pi
-
 if np.linalg.norm(error) < 0.1:
     print(f"===========================================")
     print(f"[TOL SATISFIED] ERROR:{error.flatten()}")
 
+orbit.raan = x[0][0]  # reset
+orbit.aop  = x[1][0]  # reset
+dV = x[2][0]
 
-f_x = sat_orbit_targeting(earth_parking, x, departure_date,arrival_date, earth_soi, mars_soi)
+f_x = sat_orbit_targeting(earth_parking, x, Vinf_departure)
 error = (f_x-y_d)
 print(f"\nParking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = {np.rad2deg(x[1][0])} deg | dV = {x[2][0]:.3f} km/s\n")
+print(f'Vinf departure after targeting: {f_x.flatten()} km/s with error of {error.flatten()} km/s compared to target Vinf departure of {Vinf_departure.flatten()} km/s\n')
+
+r_eci, v_eci = orbit_to_inertial_state(orbit)
+v_postburn_eci = v_eci + dV * v_eci/np.linalg.norm(v_eci)  
+Nbody_prop = variable_nbody_propagtion(r_eci, v_postburn_eci, earth_soi, mars_soi, departure_date, arrival_date)
 
 
 '''

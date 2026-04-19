@@ -773,6 +773,7 @@ def orbit_to_inertial_state(orbit):
 # print(f'Calculated Vinf departure vector from analytical function: {vinf_eci} km')
 
 # ------------------------------------------------------------------------Step 3: Differential Correction: targetting Lamberts Vinf for better initial conditions ----------------------------------------------------------------------
+print("\n------------------------------------------------------------------------------------------------Phase 1: Vinf Targetting------------------------------------------------------------------------------------------------n")
 
 # Guess X → propagate → detect periapsis → compute B-plane → correct X
 def vinf_target_function(x,orbit):
@@ -787,21 +788,21 @@ def vinf_target_function(x,orbit):
     vinf_eci = calculate_vinf_departure(dV, orbit, hyp_parameters)
     return vinf_eci.reshape(3,1)
 
-def sensitivity_matrix(x, orbit, dt_raan, dt_aop, dt_dV, f_x):
+def sensitivity_matrix(x, target_function, fun_args, step_sizes, f_x):
     
     # Reshape dt_input args into dt vectors
-    dt_rann_ar = np.array([dt_raan, 0,0]).reshape(3, 1)
-    dt_aop_ar = np.array([0, dt_aop,0]).reshape(3, 1)
-    dt_dV_ar = np.array([0, 0, dt_dV]).reshape(3, 1)
+    dt_rann_ar = np.array([step_sizes[0][0], 0,0]).reshape(3, 1)
+    dt_aop_ar = np.array([0, step_sizes[1][0],0]).reshape(3, 1)
+    dt_dV_ar = np.array([0, 0, step_sizes[2][0]]).reshape(3, 1)
     # equations from AGI newtons method paper 
-    dt_raan_col = (1/(dt_raan))*(vinf_target_function(  x + dt_rann_ar,orbit) - f_x)
+    dt_raan_col = (1/(step_sizes[0][0]))*(target_function(  x + dt_rann_ar,fun_args) - f_x)
     # Reset orbit to x before each call so state doesn't bleed between columns
     orbit.raan = x[0][0]  # reset
     orbit.aop  = x[1][0]  # reset
-    dt_aop_col = (1/(dt_aop))*(vinf_target_function( x + dt_aop_ar,orbit) - f_x)
+    dt_aop_col = (1/(step_sizes[1][0]))*(target_function( x + dt_aop_ar,fun_args) - f_x)
     orbit.raan = x[0][0]  # reset
     orbit.aop  = x[1][0]  # reset
-    dt_dV_col = (1/(dt_dV))*(vinf_target_function(x + dt_dV_ar,orbit) - f_x)
+    dt_dV_col = (1/(step_sizes[2][0]))*(target_function(x + dt_dV_ar,fun_args) - f_x)
     orbit.raan = x[0][0]  # reset
     orbit.aop  = x[1][0]  # reset
     return np.block([dt_raan_col, dt_aop_col, dt_dV_col])
@@ -824,11 +825,15 @@ def differential_correction(
 
         f_x = targetting_function(x, function_args)
         error = (f_x-y_d)
-        J = sensitivity_matrix(x,function_args, step_sizes[0][0],step_sizes[1][0],step_sizes[2][0],f_x)    
+        J = sensitivity_matrix(x,targetting_function, function_args, step_sizes, f_x)    
         x_k = x - np.linalg.pinv(J)@(f_x-y_d)
 
-        print(f"[{i}] ERROR:{error.flatten()}")
-        print(f"Parking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = {np.rad2deg(x[1][0])} deg\n | dV = {x[2][0]:.3f} km/s\n")
+        if targetting_function == vinf_target_function:
+            print(f"[{i}] Difference between computed and target Vinf: {error.flatten()} km/s --> {np.linalg.norm(error.flatten()):.4f} km/s")
+            print(f"Parking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = {np.rad2deg(x[1][0])} deg | dV = {x[2][0]} km/s\n")
+        elif targetting_function == mars_position_target_function:
+            print(f"[{i}] Difference between computed and target Mars COM position: {error.flatten()} km --> {np.linalg.norm(error.flatten()):.4f} km")
+            print(f"Parking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = {np.rad2deg(x[1][0])} deg | dV = {x[2][0]} km/s\n")
 
         x = x_k
         i += 1
@@ -866,19 +871,34 @@ print(f'Vinf departure after targeting: {f_x.flatten()} km/s with error of {erro
 
 # --------------------------------------------------------------------------- The zero-SOI framing/Two-body continuation first --> Purely heliocentric motions -------------------------------------------------------------------------
 
-r_eci, v_eci = orbit_to_inertial_state(orbit)
-v_postburn_eci = v_eci + dV * v_eci/np.linalg.norm(v_eci)  
+# r_eci, v_eci = orbit_to_inertial_state(earth_parking)
+# v_postburn_eci = v_eci + dV * v_eci/np.linalg.norm(v_eci)  
 
-central_body = sun
-bodies = []
-fun_arg = [central_body,bodies]
+# central_body = sun
+# bodies = []
+# fun_arg = [central_body,bodies]
 
-dt = TimeDelta(3600, format='sec')
-r_sats, _, _ = propagate_rk4(r_eci+r1_earth, f_x.reshape(1,3)+ v1_earth, departure_date, arrival_date, dt, fun_arg=fun_arg)
+# dt = TimeDelta(3600, format='sec')
+# r_sats, _, _ = propagate_rk4(r_eci+r1_earth, f_x.reshape(1,3)+ v1_earth, departure_date, arrival_date, dt, fun_arg=fun_arg)
 
-r_mars_miss = r_sats[-1] - r2_mars
-print(f'Satellite Missed Mars Target by {np.linalg.norm(r_mars_miss):.5f} km')
-# np.float64(76003.59582051697) when dt = 60. dont run. takes 2.5 hrs
+# miss_vector = []
+# miss_mag = []
+
+# for pos in r_sats: 
+#     r_mars_miss = pos - r2_mars
+#     miss_vector.append(r_mars_miss)
+#     r_miss_mag = np.linalg.norm(r_mars_miss)
+#     miss_mag.append(r_miss_mag)
+
+# closest_idx =  np.argmin(miss_mag)
+# r_mars_miss = miss_vector[closest_idx]
+# print(f'Satellite Missed Mars Target by {np.linalg.norm(r_mars_miss):.5f} km')
+# # np.float64(76003.59582051697) when dt = 60. dont run. takes 2.5 hrs
+
+'''
+when i run the full nbody propagation here with the 3 leg mission, im able to cross earth & mars SOI, and my mars periapsis is 256,000 km with a mars relative velocity of 2.645 km/s.
+Nbody_prop = variable_nbody_propagtion(r_eci, v_postburn_eci, earth_soi, mars_soi, departure_date, arrival_date)
+'''
 
 # ------------------------------------------------------------------------Step 4: Differential Correction: targetting Lamberts Vinf for better initial conditions ----------------------------------------------------------------------
 
@@ -886,7 +906,10 @@ print(f'Satellite Missed Mars Target by {np.linalg.norm(r_mars_miss):.5f} km')
 # we have kinda good initial conditions from lamberts. work on iterating on the inital RAAN/AOP/dV from parking orbit to miniminze the error between sat and mars. 
 # use those converged conditions for RAAN/AOP/dV as initial conditions for the n-body propagator and then apply differential correciton once again for b plane correction 
 
-def mars_position_target_function(x,orbit,departure_date,arrival_date):
+print("\n------------------------------------------------------------------------------------Phase 2: R_mars_COM targetting: r_sc - r_mars = 0 ------------------------------------------------------------------------------------n")
+
+def mars_position_target_function(x,fun_args):
+    orbit,departure_date,arrival_date = fun_args
     orbit.raan = x[0][0]
     orbit.aop  = x[1][0]
     dV         = x[2][0]
@@ -911,8 +934,14 @@ x , f_x, error = differential_correction(
     orbit = earth_parking
 )
 
-print(f"\nParking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = {np.rad2deg(x[1][0])} deg | dV = {x[2][0]:.3f} km/s\n")
-print(f'Vinf departure after targeting: {f_x.flatten()} km/s with error of {error.flatten()} km/s compared to target Vinf departure of {Vinf_departure.flatten()} km/s\n')
+print(f"\nParking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = {np.rad2deg(x[1][0])} deg | dV = {x[2][0]} km/s\n")
+print(f'Heliocentric Position of Spacecraft at Mars arrival TOF: {f_x.flatten()} km with error of {error.flatten()} km compared to the target position {r2_mars.flatten()} km \n')
+print(f'Hello')
+'''
+iteration 6
+[CONVERGED] ERROR:[-7.16149807e-05 -7.35819340e-05 -3.23206186e-05]
+Parking Orbit RAAN = 91.12437422103665 deg  | Parking Orbit AOP = 265.0703882273781 deg | dV = 3.637 km/s
+'''
 
 Nbody_prop = variable_nbody_propagtion(r_eci, v_postburn_eci, earth_soi, mars_soi, departure_date, arrival_date)
 

@@ -476,7 +476,7 @@ Vinf_departure_mag = np.linalg.norm(optimal_Vinf_departure) #*(u.km/u.s)
 # Define Earth Parking Orbit
 earth_parking = Orbit(mu=EARTH_MU,
                       a=(400+6378)*u.km,
-                      e=0.0*u.km/u.km,  # unitless
+                      e=0.0001*u.km/u.km,  # unitless
                       f0=(0*u.deg).to(u.rad),
                       inc=(28.5*u.deg).to(u.rad),
                       raan=(175*u.deg).to(u.rad),
@@ -486,7 +486,7 @@ earth_parking = Orbit(mu=EARTH_MU,
 # Define Mars Parking Orbit
 mars_parking = Orbit(mu=MARS_MU,
                       a=(400+3396)*u.km,
-                      e=0.0*u.km/u.km,  # unitless
+                      e=0.0001*u.km/u.km,  # unitless
                       f0=(0*u.deg).to(u.rad),
                       inc=(20*u.deg).to(u.rad),
                       raan=(55*u.deg).to(u.rad),
@@ -667,16 +667,16 @@ def Bplane2(r_soi_cross,vinf_arrival_vec,mars_mu):
     P_mag = mars_mu * e # same as -vinf**2 * a *e
     P_hat = e_vec/e
     P = P_mag * P_hat
-
     Q = np.cross(h,P)
     Q_hat = Q/np.linalg.norm(Q)
 
     cos_finf = -mars_mu/P_mag
     sin_finf = -1*np.sqrt(1-(mars_mu/P_mag)**2)
-
+    
     s_hat = -(cos_finf * P_hat + sin_finf * Q_hat)
     # print(f's_hat = {s_hat}')
     N = np.array([0,0,1])
+
     '''
      N = np.array([0,0,1]) Because you are in ICRS, this  vector points toward the Earth's North Pole.
      While this is mathematically valid for defining a coordinate system,
@@ -851,12 +851,9 @@ def differential_correction(
         if targetting_function == vinf_target_function:
             print(f"[{i}] Difference between computed and target Vinf: {error.flatten()} km/s --> {np.linalg.norm(error.flatten()):.4f} km/s")
             print(f"Parking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = {np.rad2deg(x[1][0])} deg | dV = {x[2][0]} km/s\n")
-        # elif targetting_function == mars_position_target_function:
-            # print(f"[{i}] Difference between computed and target Mars COM position: {error.flatten()} km --> {np.linalg.norm(error.flatten()):.4f} km")
-            # print(f"Parking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = {np.rad2deg(x[1][0])} deg | dV = {x[2][0]} km/s\n")
-        # elif targetting_function == bplane_target_function:
-            # print(f"[{i}] Difference between computed and target B-plane parameters: {error.flatten()} | Closest approach = {f_x.flatten()[0]} km vs target of {y_d.flatten()[0]} km | TOF for periapsis = {f_x.flatten()[3]} days vs target of {y_d.flatten()[3]} days")
-            # print(f"Parking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = {np.rad2deg(x[1][0])} deg | dV = {x[2][0]} km/s\n")
+        elif targetting_function == mars_position_target_function:
+            print(f"[{i}] Difference between computed and target Mars COM position: {error.flatten()} km --> {np.linalg.norm(error.flatten()):.4f} km")
+            print(f"Parking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = {np.rad2deg(x[1][0])} deg | dV = {x[2][0]} km/s\n")
         elif targetting_function == bplane_target_function:
             print(f"[{i}] BR error: {error[0,0]:.2f} km | BT error: {error[1,0]:.2f} km | TOF error: {error[2,0]*24:.2f} hrs")
             print(f"    Computed: BR={f_x[0,0]:.2f} km, BT={f_x[1,0]:.2f} km, TOF={f_x[2,0]:.2f} days")
@@ -882,7 +879,7 @@ def differential_correction(
     return x,f_x,error
 
 x ,f_x, error = differential_correction(
-    x0 = np.array([np.deg2rad(175.0), np.deg2rad(240), 3.55]).reshape(3, 1),
+    x0 = np.array([(earth_parking.raan.value), (earth_parking.aop.value), 3.55]).reshape(3, 1),
     y_d = Vinf_departure.reshape(3,1),
     targetting_function = vinf_target_function,
     function_args = (earth_parking,),
@@ -935,33 +932,33 @@ Nbody_prop = variable_nbody_propagtion(r_eci, v_postburn_eci, earth_soi, mars_so
 
 print("\n------------------------------------------------------------------------------------Phase 2: R_mars_COM targetting: r_sc - r_mars = 0 ------------------------------------------------------------------------------------n")
 
-# def mars_position_target_function(x,fun_args):
-#     orbit,departure_date,arrival_date = fun_args
-#     orbit.raan = x[0][0]
-#     orbit.aop  = x[1][0]
-#     dV         = x[2][0]
+def mars_position_target_function(x,fun_args):
+    orbit,departure_date,arrival_date = fun_args
+    orbit.raan = x[0][0]
+    orbit.aop  = x[1][0]
+    dV         = x[2][0]
 
-#     r_eci, v_eci = orbit_to_inertial_state(orbit)
-#     v_postburn_eci = v_eci + (dV * (v_eci/np.linalg.norm(v_eci)))  # apply prograde delta V
-#     hyp_parameters = hyperbolic_parameters(r_eci, v_postburn_eci, orbit)
-#     vinf_eci = calculate_vinf_departure(dV, orbit, hyp_parameters)
+    r_eci, v_eci = orbit_to_inertial_state(orbit)
+    v_postburn_eci = v_eci + (dV * (v_eci/np.linalg.norm(v_eci)))  # apply prograde delta V
+    hyp_parameters = hyperbolic_parameters(r_eci, v_postburn_eci, orbit)
+    vinf_eci = calculate_vinf_departure(dV, orbit, hyp_parameters)
 
-#     dt = TimeDelta(3600, format='sec')
-#     r_sats, _, _ = propagate_rk4(r_eci+r1_earth, vinf_eci.reshape(1,3)+ v1_earth, departure_date, arrival_date, dt, fun_arg=[sun,[]])
-#     return r_sats[-1].reshape(3,1)
+    dt = TimeDelta(3600, format='sec')
+    r_sats, _, _ = propagate_rk4(r_eci+r1_earth, vinf_eci.reshape(1,3)+ v1_earth, departure_date, arrival_date, dt, fun_arg=[sun,[]])
+    return r_sats[-1].reshape(3,1)
 
-# # actual code for running
+# actual code for running
 
-# x , f_x, error = differential_correction(
-#     x0 = np.array([x[0][0], x[1][0], x[2][0]]).reshape(3, 1),
-#     y_d = r2_mars.reshape(3,1),
-#     targetting_function = mars_position_target_function,
-#     function_args = (earth_parking, departure_date, arrival_date),
-#     step_sizes = np.array([np.deg2rad(.01), np.deg2rad(.01), .01]).reshape(3, 1),
-#     tol = np.array([10e-4, 10e-4, 10e-4]).reshape(3, 1),
-#     max_i = 50,
-#     orbit = earth_parking
-# )
+x , f_x, error = differential_correction(
+    x0 = np.array([x[0][0], x[1][0], x[2][0]]).reshape(3, 1),
+    y_d = r2_mars.reshape(3,1),
+    targetting_function = mars_position_target_function,
+    function_args = (earth_parking, departure_date, arrival_date),
+    step_sizes = np.array([np.deg2rad(.01), np.deg2rad(.01), .01]).reshape(3, 1),
+    tol = np.array([10e-4, 10e-4, 10e-4]).reshape(3, 1),
+    max_i = 50,
+    orbit = earth_parking
+)
 
 # # temp code using the alr converged values from running true differntial correciton to same time
 # x , f_x, error = differential_correction(
@@ -986,15 +983,38 @@ Parking Orbit RAAN = 91.12437422103665 deg  | Parking Orbit AOP = 265.0703882273
 
 # --------------------------------------------------------------------------------------Step 5: Differential Correction: Mars B-Plane Targettings---------------------------------------------------------------------------------------
 print("\n------------------------------------------------------------------------------------------------Phase 3: B-Plane Targetting ------------------------------------------------------------------------------------------------n")
-earth_parking.raan = np.deg2rad(91.12437422103665)
-earth_parking.aop = np.deg2rad(265.0703882273781)
-dV = 3.6368109087080462
+# earth_parking.raan = np.deg2rad(91.12437422103665)
+# earth_parking.aop = np.deg2rad(265.0703882273781)
+# dV = 3.6368109087080462
 # r_eci, v_eci = orbit_to_inertial_state(earth_parking)
 # v_postburn_eci = v_eci + (dV * (v_eci/np.linalg.norm(v_eci)))
 # Nbody_prop = variable_nbody_propagtion(r_eci, v_postburn_eci, earth_soi, mars_soi, departure_date, arrival_date)
 
-print("hello")
-x = np.array([np.deg2rad(91.12437422103665), np.deg2rad(265.0703882273781), 3.6368109087080462]).reshape(3, 1)
+# def BR_BT(orbit,vinf_arr): 
+#     r_mci,v_mci = orbit_to_inertial_state(orbit)
+#     rp = np.linalg.norm(r_mci)
+#     vinf = np.linalg.norm(vinf_arr)
+#     vp_hyp = np.sqrt(vinf**2 + (2*MARS_MU.value/rp)) * (v_mci/np.linalg.norm(v_mci)) 
+#     _,_,BR_target, BT_target = Bplane2(r_mci, vp_hyp, MARS_MU.value)
+#     print(f'BR & BT = {BR_target} , {BT_target}')
+#     return BR_target, BT_target
+
+# BR_target, BT_target = BR_BT(mars_parking, Vinf_arrival)
+
+# def bplane_target(Orbit)
+#     # nomenclature as MCI but this isn't true yet. this is something i have to work on, ie convert orbital parameters to mars centered interial 
+#     r_mci, v_mci = orbit_to_inertial_state(orbit)
+#     h_vec = np.cross(r_mci,v_mci)
+     
+#     # for orbit insertion, the arrival hyperbolic geometry must be coplanar to the parking orbit --> h in same direction
+#     # using this h to calculate b plane parameters and then target those parameters
+     
+#     # maybe could target this h vector to the h vector to the measured mars arrival periapsis h vector 
+
+#     return h_vec
+
+
+# x = np.array([np.deg2rad(91.12437422103665), np.deg2rad(265.0703882273781), 3.6368109087080462]).reshape(3, 1)
 
 def bplane_target_function(x, fun_args):
     orbit,earth_soi, mars_soi, departure_date, arrival_date = fun_args
@@ -1029,6 +1049,9 @@ x, f_x, error = differential_correction(
     orbit = earth_parking
 )
 
+#     [10] BR error: -5.61 km | BT error: -0.00 km | TOF error: -134.70 hrs
+#     Computed: BR=-5.61 km, BT=7892.60 km, TOF=315.39 days
+#     RAAN=93.8877 deg | AOP=261.7480 deg | dV=3.636564 km/s
 
 '''
 plan for b plane targetting:

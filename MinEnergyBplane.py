@@ -213,35 +213,105 @@ SAT_MASS = 100*u.kg
 departure_date = Time("2026-10-19")
 sat = Spacecraft(SAT_MASS, departure_date, label="sat", color="purple")
 
-'''
----------------------------------------------------------------------------------------------------------------STEP 1--------------=------------------------------------------------------------------------------------------------
+print("\n---------------------------------------------------------------------------------------------Hohmann Transfer Preface---------------------------------------------------------------------------------------------n")
 
+# solving basic hohmann transfer for rough idea for transfer time & velocities
+
+r1 = earth.a.value
+r2 = mars.a.value
+
+# transfer ellipse SMA
+a_transfer = (r1+r2)/2
+
+#transfer time
+tof_hohmann = np.pi * np.sqrt(a_transfer**3/SUN_MU)
+
+v1 = np.sqrt(2*SUN_MU/r1 - SUN_MU/r1)
+vt1 = np.sqrt(2*SUN_MU/r1 - SUN_MU/a_transfer)
+vt2 = np.sqrt(2*SUN_MU/r2 - SUN_MU/a_transfer)
+v2 = np.sqrt(2*SUN_MU/r2 - SUN_MU/r2)
+
+
+# dV1 = (v1^2 + vt1^2 - 2*v1*vt1*cos(delta_flight_path_angle))^0.5
+# dV2 = (v2^2 + vt2^2 - 2*v2*vt2*cos(delta_flight_path_angle))^0.5
+
+# gamma flight path angle = tan^-1 (e*sin(f) / (1+e*cos(f))) 
+# where f is the true anomaly at point of manuever 
+# flight path angle is 0 and periapsis and apoapsis. Since dealing with circular orbits & hohmann transfer --> flight path angle = 0 
+
+dV1 = np.sqrt(v1**2 + vt1**2 - 2*v1*vt1)
+dV2 = np.sqrt(v2**2 + vt2**2 - 2*v2*vt2)
+print(f"Hohmann Transfer Time of Flight: {tof_hohmann/86400:.4f} days | Departure dV: {dV1:.4f} km/s | Arrival dV: {dV2:.4f} km/s\n")
+
+print("\n-------------------------------------------------------------------------------------------- Sweeping for 'desired' phase angle--------------------------------------------------------------------------------------------n")
+
+# sweep_start = Time("2020-01-01")
+# sweep_end   = Time("2031-01-01")
+# target_angle_deg = 44.0
+# tolerance_deg    = 0.5          # ±0.5° — tighten or loosen as needed
+
+# dt_sweep = TimeDelta(1, format='jd')   # 1-day steps
+# t = sweep_start
+# windows = []
+
+# while t <= sweep_end:
+
+#     r_earth_bary, _ = get_body_barycentric_posvel('earth', t)
+#     r_mars_bary,  _ = get_body_barycentric_posvel('mars',  t)
+#     r_sun_bary,   _ = get_body_barycentric_posvel('sun',   t)
+
+#     r_earth = (r_earth_bary.xyz - r_sun_bary.xyz).to(u.km).value
+#     r_mars  = (r_mars_bary.xyz  - r_sun_bary.xyz).to(u.km).value
+
+#     # Angle between Earth and Mars as seen from the Sun
+#     cos_angle = np.dot(r_earth, r_mars) / (np.linalg.norm(r_earth) * np.linalg.norm(r_mars))
+#     cos_angle = np.clip(cos_angle, -1.0, 1.0)   # guard against floating-point overshoot
+#     angle_deg = np.degrees(np.arccos(cos_angle))
+
+#     if abs(angle_deg - target_angle_deg) <= tolerance_deg:
+#         windows.append({'date': t.iso[:10], 'angle_deg': angle_deg})
+
+#     t += dt_sweep
+
+# # ── Print results ──────────────────────────────────────────────────────────────
+# print(f"\nDates where Earth–Mars angle ≈ {target_angle_deg}° (±{tolerance_deg}°):\n")
+# print(f"{'Date':<14}  {'Angle (°)':<10}")
+# print("─" * 26)
+# for w in windows:
+#     print(f"{w['date']:<14}  {w['angle_deg']:.3f}")
+# print(f"\n{len(windows)} windows found.")
+
+'''
+Date            Angle (°) 
+──────────────────────────
+2026-12-04      44.395 : Optimal Mission Duration: TOF = 261 Days: (C3: 19.748242 km²/s², Vinf Arrival: 2.947313 km/s, Vinf Departure: 4.443899 km/s)
+2026-12-05      43.839 : Optimal Mission Duration: TOF = 260 Days: (C3: 20.440657 km²/s², Vinf Arrival: 2.951958 km/s, Vinf Departure: 4.521134 km/s)
+2029-01-07      44.024 : Optimal Mission Duration: TOF = 236 Days: (C3: 17.985257 km²/s², Vinf Arrival: 3.643328 km/s, Vinf Departure: 4.240903 km/s)
+'''
+
+print("\n-----------------------------------------------------------------------------------------------------Lambert TOF Sweep-----------------------------------------------------------------------------------------------------n")
+
+'''
 Start with Lambert's problem with R1/R2/TOF.  Pull R1 and R2 from and ephemeris file for Earth and Mars.
 Iterate on Lambert's problem until you have chosen a solution that you are happy with (e.g. minimum C3 and arrival Vinfinity at Mars).
-
 '''
 
 transfer_short = Orbit(mu=SUN_MU)
 transfer_long = Orbit(mu=SUN_MU)
 
-
-'''
-EXPERIMENTING WITH SYNODIC PERIODS
-'''
-
-# eqn found online for synodic period between two planets
+# EXPERIMENTING WITH SYNODIC PERIODS
 # Synodic period = 1 / |(1/T1) - (1/T2)|
 earth_period = 2*math.pi * np.sqrt((1.496e8**3)/SUN_MU)  # in seconds
 mars_period = 2*math.pi * np.sqrt((2.279e8**3)/SUN_MU)  # in seconds
 synodic_period_days = TimeDelta(1 / abs((1 / (earth_period/86400)) - (1 / (mars_period/86400))), format = 'jd')  
 print(f'Synodic Period between Earth and Mars is {synodic_period_days} days')
 
-
 """
 Using JPL data to get postion and velocity of earth (satellite) at departure and mars (target) at arrival)
 """
 
 solar_system_ephemeris.set('de432s')
+departure_date = Time("2026-12-04")
 
 # UNCOMMENT FOR FULL SWEEP
 # loop through different synodic periods to confim validity
@@ -392,7 +462,11 @@ for res in results:
     print(f"{res['tof_days']:<12} {res['C3']:<15.2f} {np.linalg.norm(res['V_inf_dep']):<16.6f} "
           f"{np.linalg.norm(res['Vinf_arrival']):<16.6f} {res['transfer_angle']:<20.5f} {res['arrival_date'].iso[:10]:<20}")
 
-print("="*140 + "\n") 
+print("="*140 + "\n")
+
+"""
+Finding optimal solution based on minimum C3 & Vinf at arrival. 
+"""
 
 def find_optimal_solution(results, weight_C3, weight_Vinf): 
 
@@ -428,11 +502,11 @@ def find_optimal_solution(results, weight_C3, weight_Vinf):
     optimal_arrival_mars_v2 = v2_mars_vectors[optimal_idx]
     arrival_date = arrival_dates[optimal_idx]
     TOF = tof_days[optimal_idx]
-    print(f"\nOptimal Mission Duration: TOF = {TOF} Days. Arrival Date = {[arrival_date]} with (C3: {optimal_C3:.3f} km²/s², Vinf Arrival: {np.linalg.norm(optimal_Vinf_arrival):.3f} km/s, Vinf Departure: {np.linalg.norm(optimal_Vinf_departure):.3f} km/s)\n")
+    print(f"\nOptimal Mission Duration: TOF = {TOF} Days. Arrival Date = {[arrival_date]} with (C3: {optimal_C3:.6f} km²/s², Vinf Arrival: {np.linalg.norm(optimal_Vinf_arrival):.6f} km/s, Vinf Departure: {np.linalg.norm(optimal_Vinf_departure):.6f} km/s)\n")
     return optimal_C3, optimal_Vinf_departure, optimal_Vinf_arrival, optimal_transfer_v1, optimal_arrival_mars_r2,optimal_arrival_mars_v2, arrival_date, TOF
 
 # outputs array of optimal C3 & Vinf arrival based on assigned weights ( user defined )
-optimal_C3, optimal_Vinf_departure, optimal_Vinf_arrival, optimal_transfer_v1,r2_mars,v2_mars, arrival_date,TOF = find_optimal_solution(results, weight_C3=0.75, weight_Vinf=0.25)
+optimal_C3, optimal_Vinf_departure, optimal_Vinf_arrival, optimal_transfer_v1,r2_mars,v2_mars, arrival_date,TOF = find_optimal_solution(results, weight_C3=0, weight_Vinf=1)
 C3 = optimal_C3
 
 Vinf_departure = optimal_Vinf_departure #*(u.km/u.s)
@@ -756,13 +830,6 @@ def orbit_to_inertial_state(orbit):
     r_eci, v_eci = perif_2_eci(r_pqw, v_pqw, orbit.inc, orbit.raan, orbit.aop)
     return r_eci,v_eci
 
-# r_eci, v_eci = orbit_to_inertial_state(earth_parking)
-# dV0 = np.sqrt(Vinf_departure_mag**2 + (2*EARTH_MU.value/np.linalg.norm(r_eci))) - np.linalg.norm(v_eci)
-# v_postburn_eci = v_eci + (dV0 * (v_eci/np.linalg.norm(v_eci)))  # apply prograde delta 
-# hyp_parameters = hyperbolic_parameters(r_eci, v_postburn_eci, earth_parking)
-# vinf_eci = calculate_vinf_departure(dV0, earth_parking, hyp_parameters)
-# print(f'Calculated Vinf departure vector from analytical function: {vinf_eci} km')
-
 # ------------------------------------------------------------------------Step 3: Differential Correction: targetting Lamberts Vinf for better initial conditions ----------------------------------------------------------------------
 print("\n------------------------------------------------------------------------------------------------Phase 1: Vinf Targetting------------------------------------------------------------------------------------------------n")
 
@@ -800,26 +867,6 @@ def sensitivity_matrix(x, target_function, fun_args, step_sizes, f_x):
     orbit.raan = x[0][0]  # reset
     orbit.aop  = x[1][0]  # reset
     return np.block([dt_raan_col, dt_aop_col, dt_dV_col])
-
-## central difference takes double the time since calls the funcitons twice per column
-# def sensitivity_matrix(x, target_function, fun_args, step_sizes, f_x):
-#     orbit = fun_args[0]
-#     # Reshape dt_input args into dt vectors
-#     dt_rann_ar = np.array([step_sizes[0][0], 0,0]).reshape(3, 1)
-#     dt_aop_ar = np.array([0, step_sizes[1][0],0]).reshape(3, 1)
-#     dt_dV_ar = np.array([0, 0, step_sizes[2][0]]).reshape(3, 1)
-#     # equations from AGI newtons method paper 
-#     dt_raan_col = (1/( 2 * step_sizes[0][0]))*(target_function( x + dt_rann_ar,fun_args) - target_function( x - dt_rann_ar,fun_args))
-#     # Reset orbit to x before each call so state doesn't bleed between columns
-#     orbit.raan = x[0][0]  # reset
-#     orbit.aop  = x[1][0]  # reset
-#     dt_aop_col = (1/(2 * step_sizes[1][0]))*(target_function( x + dt_aop_ar,fun_args) - target_function( x - dt_aop_ar,fun_args))
-#     orbit.raan = x[0][0]  # reset
-#     orbit.aop  = x[1][0]  # reset
-#     dt_dV_col = (1/(2 *step_sizes[2][0]))*(target_function(x + dt_dV_ar,fun_args) - target_function(x - dt_dV_ar,fun_args))
-#     orbit.raan = x[0][0]  # reset
-#     orbit.aop  = x[1][0]  # reset
-#     return np.block([dt_raan_col, dt_aop_col, dt_dV_col])
 
 def differential_correction(
         x0,
@@ -888,34 +935,15 @@ print(f"\nParking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = 
 print(f'Vinf departure after targeting: {f_x.flatten()} km/s with error of {error.flatten()} km/s compared to target Vinf departure of {Vinf_departure.flatten()} km/s\n')
 
 # --------------------------------------------------------------------------- The zero-SOI framing/Two-body continuation first --> Purely heliocentric motions -------------------------------------------------------------------------
-
-# r_eci, v_eci = orbit_to_inertial_state(earth_parking)
-# v_postburn_eci = v_eci + dV * v_eci/np.linalg.norm(v_eci)  
-
-# central_body = sun
-# bodies = []
-# fun_arg = [central_body,bodies]
-
-# dt = TimeDelta(3600, format='sec')
-# r_sats, _, _ = propagate_rk4(r_eci+r1_earth, f_x.reshape(1,3)+ v1_earth, departure_date, arrival_date, dt, fun_arg=fun_arg)
-
-# miss_vector = []
-# miss_mag = []
-
-# for pos in r_sats: 
-#     r_mars_miss = pos - r2_mars
-#     miss_vector.append(r_mars_miss)
-#     r_miss_mag = np.linalg.norm(r_mars_miss)
-#     miss_mag.append(r_miss_mag)
-
-# closest_idx =  np.argmin(miss_mag)
-# r_mars_miss = miss_vector[closest_idx]
-# print(f'Satellite Missed Mars Target by {np.linalg.norm(r_mars_miss):.5f} km')
-# # np.float64(76003.59582051697) when dt = 60. dont run. takes 2.5 hrs
-
 '''
 when i run the full nbody propagation here with the 3 leg mission, im able to cross earth & mars SOI, and my mars periapsis is 256,000 km with a mars relative velocity of 2.645 km/s.
 Nbody_prop = variable_nbody_propagtion(r_eci, v_postburn_eci, earth_soi, mars_soi, departure_date, arrival_date)
+'''
+'''
+When I run pure 2 body heliocentric propagation, I miss mars target by 76003.59582051697 km when running dt = 60 seconds --> too long (2.5 hrs)
+# r_eci, v_eci = orbit_to_inertial_state(earth_parking)
+# v_postburn_eci = v_eci + dV * v_eci/np.linalg.norm(v_eci)  
+# r_sats, _, _ = propagate_rk4(r_eci+r1_earth, f_x.reshape(1,3)+ v1_earth, departure_date, arrival_date, dt, fun_arg=fun_arg)
 '''
 
 # ------------------------------------------------------------------------------Step 4: Differential Correction: targetting targetting: r_sc - r_mars = 0 ----------------------------------------------------------------------------
@@ -954,18 +982,6 @@ x , f_x, error = differential_correction(
     orbit = earth_parking
 )
 
-# # temp code using the alr converged values from running true differntial correciton to same time
-# x , f_x, error = differential_correction(
-#     x0 = np.array([np.deg2rad(91.12437422103665), np.deg2rad(265.0703882273781), 3.6368109087080462]).reshape(3, 1),
-#     y_d = r2_mars.reshape(3,1),
-#     targetting_function = mars_position_target_function,
-#     function_args = (earth_parking, departure_date, arrival_date),
-#     step_sizes = np.array([np.deg2rad(.01), np.deg2rad(.01), .01]).reshape(3, 1),
-#     tol = np.array([10e-4, 10e-4, 10e-4]).reshape(3, 1),
-#     max_i = 50,
-#     orbit = earth_parking
-# )
-
 print(f"\nParking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = {np.rad2deg(x[1][0])} deg | dV = {x[2][0]} km/s\n")
 print(f'Heliocentric Position of Spacecraft at Mars arrival TOF: {f_x.flatten()} km with error of {error.flatten()} km compared to the target position {r2_mars.flatten()} km \n')
 dV = x[2][0]
@@ -977,38 +993,6 @@ Parking Orbit RAAN = 91.12437422103665 deg  | Parking Orbit AOP = 265.0703882273
 
 # --------------------------------------------------------------------------------------Step 5: Differential Correction: Mars B-Plane Targettings---------------------------------------------------------------------------------------
 print("\n------------------------------------------------------------------------------------------------Phase 3: B-Plane Targetting ------------------------------------------------------------------------------------------------n")
-# earth_parking.raan = np.deg2rad(91.12437422103665)
-# earth_parking.aop = np.deg2rad(265.0703882273781)
-# dV = 3.6368109087080462
-# r_eci, v_eci = orbit_to_inertial_state(earth_parking)
-# v_postburn_eci = v_eci + (dV * (v_eci/np.linalg.norm(v_eci)))
-# Nbody_prop = variable_nbody_propagtion(r_eci, v_postburn_eci, earth_soi, mars_soi, departure_date, arrival_date)
-
-# def BR_BT(orbit,vinf_arr): 
-#     r_mci,v_mci = orbit_to_inertial_state(orbit)
-#     rp = np.linalg.norm(r_mci)
-#     vinf = np.linalg.norm(vinf_arr)
-#     vp_hyp = np.sqrt(vinf**2 + (2*MARS_MU.value/rp)) * (v_mci/np.linalg.norm(v_mci)) 
-#     _,_,BR_target, BT_target = Bplane2(r_mci, vp_hyp, MARS_MU.value)
-#     print(f'BR & BT = {BR_target} , {BT_target}')
-#     return BR_target, BT_target
-
-# BR_target, BT_target = BR_BT(mars_parking, Vinf_arrival)
-
-# def bplane_target(Orbit)
-#     # nomenclature as MCI but this isn't true yet. this is something i have to work on, ie convert orbital parameters to mars centered interial 
-#     r_mci, v_mci = orbit_to_inertial_state(orbit)
-#     h_vec = np.cross(r_mci,v_mci)
-     
-#     # for orbit insertion, the arrival hyperbolic geometry must be coplanar to the parking orbit --> h in same direction
-#     # using this h to calculate b plane parameters and then target those parameters
-     
-#     # maybe could target this h vector to the h vector to the measured mars arrival periapsis h vector 
-
-#     return h_vec
-
-
-# x = np.array([np.deg2rad(91.12437422103665), np.deg2rad(265.0703882273781), 3.6368109087080462]).reshape(3, 1)
 
 def bplane_target_function(x, fun_args):
     orbit,earth_soi, mars_soi, departure_date, arrival_date = fun_args
@@ -1048,7 +1032,6 @@ x, f_x, error = differential_correction(
 #     RAAN=93.8877 deg | AOP=261.7480 deg | dV=3.636564 km/s
 
 '''
-plan for b plane targetting:
     - some notes for myself: the B plane is a plane orthogonal/normal to the hyperbolic trajectory plane ( the incoming asymptote) and the initial hyperbolic excess velocity vector. 
         - normal to the vinf vector 
     - it allows s/c to have some specific hyperbolic trajectory for flyby or in our case: orbit capture
@@ -1064,14 +1047,4 @@ plan for b plane targetting:
     - R = unit vector: cross product S x T
 
     - B vector points from center of planet to the point at which the incoming asymptote of a spacecrafts hyperbolic trajectory pierces the B plane
-
-Need to set up Mars Parking orbit 
---> need to iterate kinda like we did here where we need to define a position we want to be at --> iterate on either a dv manuever and or parking orbit to satisfy 
-
-2  approaches: 
-
-    1. iterate on the transfer V1 from departure: Perturb transfer_v1, propagate n-body to Mars SOI, measure B-plane error, iterate with Newton's method.
-    2. Apply a small dV somewhere along the transfer, iterate on that [dvx, dvy, dvz] to minimize B-plane error.
-
-    For both, need to extract the point wherein the n-body propagtor outputs the position & velocity of the s/c when entering MARS SOi
 '''

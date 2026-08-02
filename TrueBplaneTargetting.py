@@ -646,11 +646,30 @@ def sphere_of_influence(body, sun_mu):
 earth_soi = sphere_of_influence(earth, SUN_MU)
 mars_soi = sphere_of_influence(mars, SUN_MU)
 
-def Bplane2(r_soi_cross,vinf_arrival_vec,mars_mu):
+def mars_pole_icrs(t):
+    """
+    Mars north pole unit vector in the ICRF/J2000 equatorial frame,
+    from IAU WGCCRE rotational elements (Archinal et al., 2009/2015).
+    t: astropy Time
+    """
+    T = (t.tdb.jd - 2451545.0) / 36525.0  # Julian centuries from J2000 TDB
+
+    alpha_0 = np.deg2rad(317.68143 - 0.1061 * T)   # pole RA
+    delta_0 = np.deg2rad(52.88650 - 0.0609 * T)    # pole Dec
+
+    N = np.array([
+        np.cos(delta_0) * np.cos(alpha_0),
+        np.cos(delta_0) * np.sin(alpha_0),
+        np.sin(delta_0)
+    ])
+    return N / np.linalg.norm(N)
+
+
+def Bplane2(r_soi_cross,vinf_arrival_vec,mars_mu,N):
 
     vinf_arrival = np.linalg.norm(vinf_arrival_vec)
 
-    # all the vectors are in the perifocal frame 
+    # all the vectors are in the perifocal frame --> fact check for consistency pls!!!!
     h = np.cross(r_soi_cross, vinf_arrival_vec)
     h_hat = h / np.linalg.norm(h)    
     
@@ -668,17 +687,6 @@ def Bplane2(r_soi_cross,vinf_arrival_vec,mars_mu):
     sin_finf = -1*np.sqrt(1-(mars_mu/P_mag)**2)
     
     s_hat = -(cos_finf * P_hat + sin_finf * Q_hat)
-    # print(f's_hat = {s_hat}')
-    N = np.array([0,0,1])
-
-    '''
-     N = np.array([0,0,1]) Because you are in ICRS, this  vector points toward the Earth's North Pole.
-     While this is mathematically valid for defining a coordinate system,
-             most Mars mission planners define the B-plane relative to the Mars Orbital Plane or the Mars North Pole. 
-             Using the Earth's pole is fine for convergence, but your btheta value will be relative to Earth's equator, not the Martian landscape. 
-             Just something to keep in mind when interpreting your results!
-    
-    '''
     t_hat = np.cross(s_hat,N)/np.linalg.norm(np.cross(s_hat,N))
     r_hat = np.cross(s_hat,t_hat)
 
@@ -838,6 +846,10 @@ def differential_correction(
         orbit.aop  = x[1][0]
 
         f_x = targetting_function(x, function_args)
+
+        # NEW: if the target function computed a fresh target this call, use it
+        y_d_current = getattr(targetting_function, '_last_target', y_d)
+        
         error = (f_x-y_d)
         J = sensitivity_matrix(x,targetting_function, function_args, step_sizes, f_x)    
         x_k = x - np.linalg.pinv(J)@(f_x-y_d)
@@ -977,41 +989,29 @@ Parking Orbit RAAN = 91.12437422103665 deg  | Parking Orbit AOP = 265.0703882273
 
 # --------------------------------------------------------------------------------------Step 5: Differential Correction: Mars B-Plane Targettings---------------------------------------------------------------------------------------
 print("\n------------------------------------------------------------------------------------------------Phase 3: B-Plane Targetting ------------------------------------------------------------------------------------------------n")
-# earth_parking.raan = np.deg2rad(91.12437422103665)
-# earth_parking.aop = np.deg2rad(265.0703882273781)
-# dV = 3.6368109087080462
-# r_eci, v_eci = orbit_to_inertial_state(earth_parking)
-# v_postburn_eci = v_eci + (dV * (v_eci/np.linalg.norm(v_eci)))
-# Nbody_prop = variable_nbody_propagtion(r_eci, v_postburn_eci, earth_soi, mars_soi, departure_date, arrival_date)
-
-# def BR_BT(orbit,vinf_arr): 
-#     r_mci,v_mci = orbit_to_inertial_state(orbit)
-#     rp = np.linalg.norm(r_mci)
-#     vinf = np.linalg.norm(vinf_arr)
-#     vp_hyp = np.sqrt(vinf**2 + (2*MARS_MU.value/rp)) * (v_mci/np.linalg.norm(v_mci)) 
-#     _,_,BR_target, BT_target = Bplane2(r_mci, vp_hyp, MARS_MU.value)
-#     print(f'BR & BT = {BR_target} , {BT_target}')
-#     return BR_target, BT_target
-
-# BR_target, BT_target = BR_BT(mars_parking, Vinf_arrival)
-
-# def bplane_target(Orbit)
-#     # nomenclature as MCI but this isn't true yet. this is something i have to work on, ie convert orbital parameters to mars centered interial 
-#     r_mci, v_mci = orbit_to_inertial_state(orbit)
-#     h_vec = np.cross(r_mci,v_mci)
-     
-#     # for orbit insertion, the arrival hyperbolic geometry must be coplanar to the parking orbit --> h in same direction
-#     # using this h to calculate b plane parameters and then target those parameters
-     
-#     # maybe could target this h vector to the h vector to the measured mars arrival periapsis h vector 
-
-#     return h_vec
-
-
 # x = np.array([np.deg2rad(91.12437422103665), np.deg2rad(265.0703882273781), 3.6368109087080462]).reshape(3, 1)
 
+def solve_achievable_plane(S_hat, N, inc_desired, branch=+1):
+    cos_gamma = np.clip(np.dot(S_hat, N), -1.0, 1.0)
+    gamma = np.arccos(cos_gamma)
+    inc_min = abs(np.pi/2 - gamma)
+    inc_max = min(np.pi, np.pi/2 + gamma)
+    inc_clamped = np.clip(inc_desired, inc_min, inc_max)
+
+    u1 = N - np.dot(N, S_hat) * S_hat
+    u1 /= np.linalg.norm(u1)
+    u2 = np.cross(S_hat, u1)
+
+    cos_phi = np.clip(np.cos(inc_clamped) / np.sin(gamma), -1.0, 1.0)
+    phi = branch * np.arccos(cos_phi)
+    h_hat = np.cos(phi) * u1 + np.sin(phi) * u2
+
+    inc_actual = np.arccos(np.clip(h_hat[2], -1.0, 1.0))
+    raan = np.arctan2(h_hat[0], -h_hat[1]) % (2*np.pi)
+    return inc_actual, raan, h_hat, gamma, (inc_min, inc_max)
+
 def bplane_target_function(x, fun_args):
-    orbit,earth_soi, mars_soi, departure_date, arrival_date = fun_args
+    orbit, earth_soi, mars_soi, departure_date, arrival_date, mars_parking, inc_desired, branch = fun_args
     orbit.raan = x[0][0]
     orbit.aop  = x[1][0]
     dV = x[2][0]
@@ -1025,18 +1025,58 @@ def bplane_target_function(x, fun_args):
         return np.array([1e9, 0.0, 1e9]).reshape(3, 1)
 
     r_periapsis, v_periapsis, t_periapsis = periapsis_state
-    rp, B_theta, BR, BT = Bplane2(r_periapsis, v_periapsis, MARS_MU.value)
+
+    # changed code here to now get the actual S_hat from the leg 2 SOI crossing state instead of using the lambert solution S_hat from vinf
+
+    leg2 = Nbody_prop['Leg 2 Heliocentric']
+    r_helio_soi = leg2['r'][-1]
+    v_helio_soi = leg2['v'][-1]
+    t_soi = leg2['t'][-1]
+    r_mars_soi, v_mars_soi = get_body_barycentric_posvel('mars', t_soi)
+    r_sun_soi, v_sun_soi = get_body_barycentric_posvel('sun', t_soi)
+    r_mars_helio = (r_mars_soi.xyz - r_sun_soi.xyz).to(u.km).value
+    v_mars_helio = (v_mars_soi.xyz - v_sun_soi.xyz).to(u.km/u.s).value
+    vinf_actual_vec = v_helio_soi - v_mars_helio
+    vinf_actual_mag = np.linalg.norm(vinf_actual_vec)
+    S_hat = vinf_actual_vec / vinf_actual_mag
+
+    N_mars = mars_pole_icrs(t_periapsis) 
+
+    inc_actual, raan_actual, h_hat, gamma, (inc_min, inc_max) = solve_achievable_plane(
+            S_hat, N_mars, inc_desired, branch=branch
+        )
+    # keep mars_parking's plane in sync with what's actually achievable this iteration
+    mars_parking.inc = inc_actual
+    mars_parking.raan = raan_actual
+
+    B_hat = np.cross(h_hat, S_hat)
+    B_hat /= np.linalg.norm(B_hat)
+
+    rp_target = mars_parking.a.value * (1 - mars_parking.e.value)
+    B_mag = rp_target * np.sqrt(1 + (2*MARS_MU.value)/(rp_target * vinf_actual_mag**2))
+
+    T_hat = np.cross(S_hat, N_mars); T_hat /= np.linalg.norm(T_hat)
+    R_hat = np.cross(S_hat, T_hat)
+    BR_target = B_mag * np.dot(B_hat, R_hat)
+    BT_target = B_mag * np.dot(B_hat, T_hat)
+
+    # actual B-plane result of this trial trajectory, same frame
+    rp, B_theta, BR, BT = Bplane2(r_periapsis, v_periapsis, MARS_MU.value, N_mars)
     TOF_actual = (t_periapsis - departure_date).to_value('jd')
+
+    # stash the freshly computed target so differential_correction can read it back
+    bplane_target_function._last_target = np.array([BR_target, BT_target, 321]).reshape(3, 1)
+
     return np.array([BR, BT, TOF_actual]).reshape(3, 1)
 
 # rp = 400+3396
 # BT_target = rp * np.sqrt(1+(2*MARS_MU.value/(rp*Vinf_arrival_mag**2)))  # from the equation for rp in terms of B and Vinf. rearranged to solve for B given rp and Vinf
 
-# angular momentum of the satellite entering the SOI of mars
-def h_hat_from_orbparm(inc,raan):  
-    return np.array([np.sin(inc)*np.sin(raan), -np.sin(inc)*np.cos(raan), np.cos(inc)])
+# # angular momentum of the satellite entering the SOI of mars
+# def h_hat_from_orbparm(inc,raan):  
+#     return np.array([np.sin(inc)*np.sin(raan), -np.sin(inc)*np.cos(raan), np.cos(inc)])
 
-h_target_orbit = h_hat_from_orbparm(mars_parking.inc, mars_parking.raan)
+# h_target_orbit = h_hat_from_orbparm(mars_parking.inc, mars_parking.raan)
 
 
 """ 
@@ -1057,6 +1097,12 @@ S_hat is fixed by the interplanetary trajectory - the simple lambert soln and de
 
 1. Design mars_parking to be compatible — pick its (inc, raan) from the family of planes containing S_hat, rather than a priori. 
 This is what real missions do: the arrival asymptote mostly dictates the achievable orbit plane unless you're willing to pay for a plane-change ΔV or bend the trajectory with a TCM upstream.
+    --> S_hat is fixed on the arrival asymptote geometry. Any achieveable orbit plane nomrmal must be orthogonal to S_hat. i.e dot(h,S_hat) = 0. There exists several planes that allow for this. 
+        --> N = Mars north poles and Gamma Y = angle between S_hat and N. the achieveable inclination sweeps as [ 90 - Gamma Y , 90 + gamma Y] 
+                --> if S_hat is near the north pole, inclination is near polar. 
+                    if S_hat is near equatorial palne, can hit almost any inclination ]
+    
+                    Pick an achieveable inclnation inside that band --> solve for matching inc/raan pair, set mars_parking to that pair, then target those B plane parameters. 
 
 2. Solve for B_theta given a desired plane, and accept that if your chosen (inc, raan) doesn't satisfy ĥ·Ŝ=0, you'll get a best-fit (minimum-plane-change) solution — not an exact match. 
 orth explicitly computing the achievable-vs-desired misalignment so you know how much of a plane-change burn you're implicitly assuming away.

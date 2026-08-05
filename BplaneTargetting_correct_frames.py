@@ -678,6 +678,9 @@ def Bplane2(r_soi_cross,vinf_arrival_vec,mars_mu):
              Using the Earth's pole is fine for convergence, but your btheta value will be relative to Earth's equator, not the Martian landscape. 
              Just something to keep in mind when interpreting your results!
     
+             
+             NEW --> over my entire code, ive been consistently using the icrs frame for all calcs. 
+                    --> the resulting orientations would be relative to the icrs frame instead of a mars centered frame
     '''
     t_hat = np.cross(s_hat,N)/np.linalg.norm(np.cross(s_hat,N))
     r_hat = np.cross(s_hat,t_hat)

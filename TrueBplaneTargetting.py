@@ -851,9 +851,11 @@ def differential_correction(
             print(f"[{i}] Difference between computed and target Mars COM position: {error.flatten()} km --> {np.linalg.norm(error.flatten()):.6f} km")
             print(f"Parking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = {np.rad2deg(x[1][0])} deg | dV = {x[2][0]} km/s\n")
         elif targetting_function == bplane_target_function:
-            print(f"[{i}] BR error: {error[0,0]:.6f} km | BT error: {error[1,0]:.6f} km | TOF error: {error[2,0]*24:.6f} hrs")
-            print(f"    Computed: BR={f_x[0,0]:.6f} km, BT={f_x[1,0]:.6f} km, TOF={f_x[2,0]:.6f} days")
-            print(f"    Target:   BR={y_d_current[0,0]:.6f} km, BT={y_d_current[1,0]:.6f} km, TOF={y_d_current[2,0]:.6f} days")
+            tof_diag = getattr(targetting_function, '_last_TOF', None)
+            tof_str = f"{tof_diag:.3f} days" if tof_diag is not None else "N/A"
+            print(f"[{i}] BR error: {error[0,0]:.6f} km | BT error: {error[1,0]:.6f} km | TOF (floating): {tof_str}")
+            print(f"    Computed: BR={f_x[0,0]:.6f} km, BT={f_x[1,0]:.6f} km")
+            print(f"    Target:   BR={y_d_current[0,0]:.6f} km, BT={y_d_current[1,0]:.6f} km")
             print(f"    RAAN={np.rad2deg(x[0][0]):.6f} deg | AOP={np.rad2deg(x[1][0]):.6f} deg | dV={x[2][0]:.6f} km/s")
             print(f"    Mars Parking Orbit --> inc={np.rad2deg(mars_parking.inc):.6f} deg | raan={np.rad2deg(mars_parking.raan):.6f} deg\n")
 
@@ -993,20 +995,29 @@ def mars_pole_icrs(t):
     T = (t.tdb.jd - 2451545.0) / 36525.0  # Julian centuries from J2000 TDB
     alpha_0 = np.deg2rad(317.68143 - 0.1061 * T)   # pole RA
     delta_0 = np.deg2rad(52.88650 - 0.0609 * T)    # pole Dec
-    N = np.array([
+    # equatorial pole direction of Mars
+    N = np.array([ 
         np.cos(delta_0) * np.cos(alpha_0),
         np.cos(delta_0) * np.sin(alpha_0),
         np.sin(delta_0)
     ])
+
+    #  This is exactly the same conversion you'd use to turn any RA/Dec sky position into an ICRF unit vector 
+    #  δ₀ plays the role of "latitude off the ICRF equatorial plane 
+    #  α₀ the longitude around the ICRF Z-axis.
     return N / np.linalg.norm(N)
 
 def mars_equatorial_frame(t):
     """R such that v_mars_eq = R @ v_icrf. Local Z = Mars pole, local X = ICRF∩Mars-equator node."""
-    N_mars = mars_pole_icrs(t)
+    N_mars = mars_pole_icrs(t) # --> this is the Z axis of mars equatorial frame in icrf coords
     Z_icrf = np.array([0.0, 0.0, 1.0])
+    # standards conventoin for any equatorial frame is that the x axs points along the intersection of the equatorial plane with the reference plane. here icrf equatorial 
+    # intersection line 2 planes is cross product of the 2 normals. 
     x_axis = np.cross(Z_icrf, N_mars); x_axis /= np.linalg.norm(x_axis)
     y_axis = np.cross(N_mars, x_axis)
-    return np.vstack([x_axis, y_axis, N_mars])
+    # This is the standard direction-cosine-matrix fact: if the rows of R are the new frame's basis vectors written in the old frame's coordinates, then R*v projects V ontp each new basis vector in turn. 
+    # i.e gives you v's components in the new frame. 
+    return np.vstack([x_axis, y_axis, N_mars]) # Stacking the three new basis vectors as rows
 
 def solve_achievable_plane(S_hat, inc_desired, t, branch=+1):
     """
@@ -1083,7 +1094,7 @@ def bplane_target_function(x, fun_args):
 
     rp_target = mars_parking.a.value * (1 - mars_parking.e.value)
     B_mag = rp_target * np.sqrt(1 + (2*MARS_MU.value)/(rp_target * vinf_actual_mag**2))
-    N = np.array([0.0, 0.0, 1.0])
+    N = np.array([0.0, 0.0, 1.0]) # B-plane T/R still ICRF Z -- unrelated to Mars pole, unchanged
     T_hat = np.cross(S_hat, N); T_hat /= np.linalg.norm(T_hat)
     R_hat = np.cross(S_hat, T_hat)
     BR_target = B_mag * np.dot(B_hat, R_hat)
@@ -1093,10 +1104,15 @@ def bplane_target_function(x, fun_args):
     rp, B_theta, BR, BT = Bplane2(r_periapsis, v_periapsis, MARS_MU.value)
     TOF_actual = (t_periapsis - departure_date).to_value('jd')
 
-    # stash the freshly computed target so differential_correction can read it back
-    bplane_target_function._last_target = np.array([BR_target, BT_target, 321]).reshape(3, 1)
+    # # stash the freshly computed target so differential_correction can read it back
+    # bplane_target_function._last_target = np.array([BR_target, BT_target, 321]).reshape(3, 1)
 
-    return np.array([BR, BT, TOF_actual]).reshape(3, 1)
+    # TOF is a diagnostic now, not a residual target
+    bplane_target_function._last_TOF = TOF_actual
+    bplane_target_function._last_periapsis = (r_periapsis, v_periapsis, t_periapsis)
+    bplane_target_function._last_target = np.array([BR_target, BT_target]).reshape(2, 1)
+
+    return np.array([BR, BT]).reshape(2, 1)
 
 # rp = 400+3396
 # BT_target = rp * np.sqrt(1+(2*MARS_MU.value/(rp*Vinf_arrival_mag**2)))  # from the equation for rp in terms of B and Vinf. rearranged to solve for B given rp and Vinf
@@ -1176,7 +1192,7 @@ x, f_x, error = differential_correction(
     function_args = (earth_parking, earth_soi, mars_soi, departure_date, arrival_date,
                       mars_parking, inc_desired, branch),
     step_sizes = np.array([np.deg2rad(.01), np.deg2rad(.01), .01]).reshape(3, 1),
-    tol = np.array([10, 10, .5/24]).reshape(3, 1),
+    tol = np.array([1, 1]).reshape(2, 1),
     max_i = 50,
     orbit = earth_parking)
 

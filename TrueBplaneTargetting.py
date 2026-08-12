@@ -646,25 +646,6 @@ def sphere_of_influence(body, sun_mu):
 earth_soi = sphere_of_influence(earth, SUN_MU)
 mars_soi = sphere_of_influence(mars, SUN_MU)
 
-# def mars_pole_icrs(t):
-#     """
-#     Mars north pole unit vector in the ICRF/J2000 equatorial frame,
-#     from IAU WGCCRE rotational elements (Archinal et al., 2009/2015).
-#     t: astropy Time
-#     """
-#     T = (t.tdb.jd - 2451545.0) / 36525.0  # Julian centuries from J2000 TDB
-
-#     alpha_0 = np.deg2rad(317.68143 - 0.1061 * T)   # pole RA
-#     delta_0 = np.deg2rad(52.88650 - 0.0609 * T)    # pole Dec
-
-#     N = np.array([
-#         np.cos(delta_0) * np.cos(alpha_0),
-#         np.cos(delta_0) * np.sin(alpha_0),
-#         np.sin(delta_0)
-#     ])
-#     return N / np.linalg.norm(N)
-
-
 def Bplane2(r_periapsis,v_periapsis,mars_mu):
 
     # vinf_arrival = np.linalg.norm(vinf_arrival_vec) # just straight up wrong. when funciton is called, the v_periapsis is passed
@@ -689,7 +670,13 @@ def Bplane2(r_periapsis,v_periapsis,mars_mu):
     sin_finf = -1*np.sqrt(1-(mars_mu/P_mag)**2)
     
     s_hat = -(cos_finf * P_hat + sin_finf * Q_hat)
-    N = np.array([0,0,1])  # ICRS frame
+    N = np.array([0,0,1])  # ICRS frame. Here N can be anything
+    # The B-plane T/R axes are a reporting convention, not a physical property of Mars.
+    '''
+    The fact that periapsis/SOI-entry is a Mars-centered event doesn't change what frame you report B-plane targets in.
+    it's still ICRF-Z-referenced by convention, same as if you were characterizing a flyby of any other body. 
+    It's only when you go from "where does the asymptote pierce the B-plane" to "what orbit do I actually fly around Mars" that Mars' physical pole enters the picture, which is exactly the solve_achievable_plane fix from before.
+    '''
     t_hat = np.cross(s_hat,N)/np.linalg.norm(np.cross(s_hat,N))
     r_hat = np.cross(s_hat,t_hat)
 
@@ -997,9 +984,40 @@ Parking Orbit RAAN = 91.12437422103665 deg  | Parking Orbit AOP = 265.0703882273
 print("\n------------------------------------------------------------------------------------------------Phase 3: B-Plane Targetting ------------------------------------------------------------------------------------------------n")
 # x = np.array([np.deg2rad(91.12437422103665), np.deg2rad(265.0703882273781), 3.6368109087080462]).reshape(3, 1)
 
-def solve_achievable_plane(S_hat, inc_desired, branch=+1):
-    N = np.array([0.0, 0.0, 1.0]) # unit vector in Z axis in ICRS frame (j2000 earth equatorial north)
-    cos_gamma = np.clip(np.dot(S_hat, N), -1.0, 1.0)
+def mars_pole_icrs(t):
+    """
+    Mars north pole unit vector in the ICRF/J2000 equatorial frame,
+    from IAU WGCCRE rotational elements (Archinal et al., 2009/2015).
+    t: astropy Time
+    """
+    T = (t.tdb.jd - 2451545.0) / 36525.0  # Julian centuries from J2000 TDB
+    alpha_0 = np.deg2rad(317.68143 - 0.1061 * T)   # pole RA
+    delta_0 = np.deg2rad(52.88650 - 0.0609 * T)    # pole Dec
+    N = np.array([
+        np.cos(delta_0) * np.cos(alpha_0),
+        np.cos(delta_0) * np.sin(alpha_0),
+        np.sin(delta_0)
+    ])
+    return N / np.linalg.norm(N)
+
+def mars_equatorial_frame(t):
+    """R such that v_mars_eq = R @ v_icrf. Local Z = Mars pole, local X = ICRF∩Mars-equator node."""
+    N_mars = mars_pole_icrs(t)
+    Z_icrf = np.array([0.0, 0.0, 1.0])
+    x_axis = np.cross(Z_icrf, N_mars); x_axis /= np.linalg.norm(x_axis)
+    y_axis = np.cross(N_mars, x_axis)
+    return np.vstack([x_axis, y_axis, N_mars])
+
+def solve_achievable_plane(S_hat, inc_desired, t, branch=+1):
+    """
+    inc_desired is now interpreted relative to Mars' equator (its rotation pole),
+    not ICRS Z. t is used to evaluate Mars' pole orientation (use t_soi -- Mars'
+    pole barely precesses over a single mission, so exact epoch doesn't matter much).
+    """
+    R = mars_equatorial_frame(t)
+    N_mars = R[2]
+
+    cos_gamma = np.clip(np.dot(S_hat, N_mars), -1.0, 1.0)
     gamma = np.arccos(cos_gamma)
     inc_min = abs(np.pi/2 - gamma)
     inc_max = min(np.pi, np.pi/2 + gamma)
@@ -1007,7 +1025,7 @@ def solve_achievable_plane(S_hat, inc_desired, branch=+1):
 
     # these 3 basis vectors are in plane perpendicualr to S_hat 
     # u1, u2, and phi — a geometric parameterization where inc_desired only picks which point on the achievable circle (phi) you land on
-    u1 = N - np.dot(N, S_hat) * S_hat
+    u1 = N_mars - np.dot(N_mars, S_hat) * S_hat
     u1 /= np.linalg.norm(u1)
     u2 = np.cross(S_hat, u1)
 
@@ -1015,10 +1033,12 @@ def solve_achievable_plane(S_hat, inc_desired, branch=+1):
     phi = branch * np.arccos(cos_phi)
     h_hat = np.cos(phi) * u1 + np.sin(phi) * u2
 
-    inc_actual = np.arccos(np.clip(h_hat[2], -1.0, 1.0))
-    raan = np.arctan2(h_hat[0], -h_hat[1]) % (2*np.pi)
-    # these raan and inc are wrt to the icrs frame, not mars equatoroal frame.so there is consistency with b plane targetting and the pathched conics
-        # --> this means that the value of raan and inc here aren't the same as mars parking orbit raan and inc wrt to mars equatorial frame. will need transformation
+    h_eq = R @ h_hat  # rotated into Mars-equatorial coords
+    inc_actual = np.arccos(np.clip(h_eq[2], -1.0, 1.0))
+    raan = np.arctan2(h_eq[0], -h_eq[1]) % (2*np.pi)
+
+    # these raan and inc are wrt to the icrs frame, but now in the mars equatoroal frame.
+        # --> are meaningful now for mars parking orbit since now wrt to mars equator and poles
     return inc_actual, raan, h_hat, gamma, (inc_min, inc_max)
 
 def bplane_target_function(x, fun_args):
@@ -1052,13 +1072,13 @@ def bplane_target_function(x, fun_args):
     S_hat = vinf_actual_vec / vinf_actual_mag
 
     inc_actual, raan_actual, h_hat, gamma, (inc_min, inc_max) = solve_achievable_plane(
-            S_hat, inc_desired, branch=branch
-        )
+    S_hat, inc_desired, t_soi, branch=branch    
+    )
     # keep mars_parking's plane in sync with what's actually achievable this iteration
     mars_parking.inc = inc_actual
     mars_parking.raan = raan_actual
 
-    B_hat = np.cross(h_hat, S_hat)
+    B_hat = np.cross(S_hat, h_hat)
     B_hat /= np.linalg.norm(B_hat)
 
     rp_target = mars_parking.a.value * (1 - mars_parking.e.value)
@@ -1166,6 +1186,32 @@ x, f_x, error = differential_correction(
 #     RAAN=94.080018 deg | AOP=261.551923 deg | dV=3.636564 km/s
 #     Mars Parking Orbit --> inc=93.000000 deg | raan=165.285414 deg
 
+""" 
+side notes 08/06/2026 From NASA guide to interplanetary trasnfers
+
+For flybys: 
+DAP  - planetary equatorial declination of incoming asymptote, of Vinf, gives measure of minimum possible inclination of flyby. 
+    --> negative of so is the latitude of vertical impact. 
+
+mag fof vinf enables one to control flyby turn angle -Delta_psi between incoming and outgoing vinf vectors by choice of cloest approach
+    --> delta_psi = 180-2*rho : comes from cos(rho) = 1/e = 1/ (1 + (vinf^2 * rp)/mu) 
+    --> using vis visa, planetocntric vel at any time : V = sqrt((2*mu/r) + vinf^2)
+
+ZAPS( zero angle periapsis sun) & ZAPE (zero angle periapsis earth) are angles between vinf and planet to sun & planet to earth respectfully
+    --> map out the cone angle of the plaent furing the far encoutner phase for a sun or an earth oriented space crafpt. 
+        --> ZAPS determines the phase angle of the planets solar illumination on the far encounter leg: phi_s = 180-ZAPS
+    
+The flyby is aimed at a point on the arrival target plane (B plane) --> plane passing throuhgh the planets centerand normal to Vinf 
+    --> the asypotte goes through a point on B plane defined by BR and BT, where T and R axis are both orthogonal to Vinf. 
+    Direction angle (B_theta) of B vectors measured CCW from T-axos to the Bvectors--> can be measured from incliantion of flyby orbit given from planet equatorial declination. 
+        cos(inc) = cos(B_theta) * cos(DAP) -- > measured in the planet equatorial frame.
+
+IN PLANET EQUATORIAL FRAME cords: 
+right ascention of Mars ecliptic pole = 267.6227 deg
+delcination of ecliptic pole = 63.2838 deg 
+"""
+
+
 '''
 plan for b plane targetting:
     - some notes for myself: the B plane is a plane orthogonal/normal to the hyperbolic trajectory plane ( the incoming asymptote) and the initial hyperbolic excess velocity vector. 
@@ -1194,3 +1240,30 @@ Need to set up Mars Parking orbit
 
     For both, need to extract the point wherein the n-body propagtor outputs the position & velocity of the s/c when entering MARS SOi
 '''
+
+def capture_burn(r_periapsis, v_periapsis, mars_parking, mars_mu):
+    """
+    Single-impulse periapsis MOI burn. Assumes the arrival hyperbola and target
+    parking orbit share periapsis radius, inclination, and RAAN (true if B-plane
+    targeting converged with the fixed inc/raan pipeline) -- so the burn is purely
+    tangential, aligned with -v_hat.
+    """
+    rp = np.linalg.norm(r_periapsis)
+    v_hyp = np.linalg.norm(v_periapsis)
+    v_hat = v_periapsis / v_hyp
+
+    a_target = mars_parking.a.value
+    v_target = np.sqrt(mars_mu * (2/rp - 1/a_target))   # vis-viva at same rp
+
+    dV_mag = v_hyp - v_target          # retrograde burn magnitude
+    dV_vec = -dV_mag * v_hat
+
+    print(f"Periapsis radius:                    {rp:.3f} km")
+    print(f"Hyperbolic arrival speed at rp:       {v_hyp:.6f} km/s")
+    print(f"Target parking-orbit speed at rp:     {v_target:.6f} km/s")
+    print(f"MOI capture burn magnitude:           {dV_mag:.6f} km/s")
+    print(f"MOI capture burn vector (MCI):        {dV_vec} km/s")
+    return dV_mag, dV_vec
+
+r_peri, v_peri, t_peri = bplane_target_function._last_periapsis
+dV_MOI, dV_MOI_vec = capture_burn(r_peri, v_peri, mars_parking, MARS_MU.value)

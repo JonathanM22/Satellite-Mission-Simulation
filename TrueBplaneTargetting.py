@@ -647,18 +647,24 @@ earth_soi = sphere_of_influence(earth, SUN_MU)
 mars_soi = sphere_of_influence(mars, SUN_MU)
 
 def Bplane2(r_periapsis,v_periapsis,mars_mu):
+    v_mag = np.linalg.norm(v_periapsis)
+    r_mag = np.linalg.norm(r_periapsis)
+    energy_term = v_mag**2 - 2*mars_mu/r_mag
 
-    # vinf_arrival = np.linalg.norm(vinf_arrival_vec) # just straight up wrong. when funciton is called, the v_periapsis is passed
+    if energy_term <= 0:
+            # trial trajectory is bound (elliptical) at "periapsis" -- not a valid
+            # hyperbolic flyby state, B-plane math doesn't apply
+            raise ValueError(f"Non-hyperbolic periapsis state (specific energy={energy_term/2:.6f} km²/s² <= 0); "
+                            f"cannot compute B-plane parameters")
 
-    vinf_arrival = np.sqrt(np.linalg.norm(v_periapsis)**2 - 2*mars_mu/np.linalg.norm(r_periapsis))
-
-    # all the vectors are in the perifocal frame --> fact check for consistency pls!!!!
+    vinf_arrival = np.sqrt(energy_term)
     h = np.cross(r_periapsis, v_periapsis)
     h_hat = h / np.linalg.norm(h)    
     
     e_vec = (1/mars_mu) * (vinf_arrival**2 * r_periapsis - np.dot(r_periapsis,v_periapsis)*v_periapsis) - r_periapsis/np.linalg.norm(r_periapsis)
     e = np.linalg.norm(e_vec)       
-
+    if e <= 1.0:
+        raise ValueError(f"Non-hyperbolic eccentricity e={e:.6f} <= 1; cannot compute B-plane parameters")
     a = -mars_mu/vinf_arrival**2
     P_mag = mars_mu * e # same as -vinf**2 * a *e
     P_hat = e_vec/e
@@ -1030,6 +1036,8 @@ def solve_achievable_plane(S_hat, inc_desired, t, branch=+1):
 
     cos_gamma = np.clip(np.dot(S_hat, N_mars), -1.0, 1.0)
     gamma = np.arccos(cos_gamma)
+    if np.sin(gamma) < 1e-8:
+        raise ValueError(f"Degenerate geometry: S_hat nearly parallel to Mars pole (gamma={np.degrees(gamma):.4f} deg)")
     inc_min = abs(np.pi/2 - gamma)
     inc_max = min(np.pi, np.pi/2 + gamma)
     inc_clamped = np.clip(inc_desired, inc_min, inc_max)
@@ -1064,44 +1072,60 @@ def bplane_target_function(x, fun_args):
     periapsis_state = Nbody_prop['Leg 3 Mars Central']['periapsis']
     if periapsis_state is None:
         print("WARNING: periapsis not detected")
-        return np.array([1e9, 0.0, 1e9]).reshape(3, 1)
+        bplane_target_function._last_TOF = None
+        bplane_target_function._last_periapsis = None
+        bplane_target_function._last_target = np.array([1e9, 1e9]).reshape(2, 1)
+        return np.array([1e9, 1e9]).reshape(2, 1)
 
     r_periapsis, v_periapsis, t_periapsis = periapsis_state
 
-    # changed code here to now get the actual S_hat from the leg 2 SOI crossing state instead of using the lambert solution S_hat from vinf
+    try: 
+        # changed code here to now get the actual S_hat from the leg 2 SOI crossing state instead of using the lambert solution S_hat from vinf
+        leg2 = Nbody_prop['Leg 2 Heliocentric']
+        r_helio_soi = leg2['r'][-1]
+        v_helio_soi = leg2['v'][-1]
+        t_soi = leg2['t'][-1]
+        r_mars_soi, v_mars_soi = get_body_barycentric_posvel('mars', t_soi)
+        r_sun_soi, v_sun_soi = get_body_barycentric_posvel('sun', t_soi)
+        r_mars_helio = (r_mars_soi.xyz - r_sun_soi.xyz).to(u.km).value
+        v_mars_helio = (v_mars_soi.xyz - v_sun_soi.xyz).to(u.km/u.s).value
+        vinf_actual_vec = v_helio_soi - v_mars_helio
+        vinf_actual_mag = np.linalg.norm(vinf_actual_vec)
+        S_hat = vinf_actual_vec / vinf_actual_mag
 
-    leg2 = Nbody_prop['Leg 2 Heliocentric']
-    r_helio_soi = leg2['r'][-1]
-    v_helio_soi = leg2['v'][-1]
-    t_soi = leg2['t'][-1]
-    r_mars_soi, v_mars_soi = get_body_barycentric_posvel('mars', t_soi)
-    r_sun_soi, v_sun_soi = get_body_barycentric_posvel('sun', t_soi)
-    r_mars_helio = (r_mars_soi.xyz - r_sun_soi.xyz).to(u.km).value
-    v_mars_helio = (v_mars_soi.xyz - v_sun_soi.xyz).to(u.km/u.s).value
-    vinf_actual_vec = v_helio_soi - v_mars_helio
-    vinf_actual_mag = np.linalg.norm(vinf_actual_vec)
-    S_hat = vinf_actual_vec / vinf_actual_mag
+        inc_actual, raan_actual, h_hat, gamma, (inc_min, inc_max) = solve_achievable_plane(
+        S_hat, inc_desired, t_soi, branch=branch    
+        )
+        # keep mars_parking's plane in sync with what's actually achievable this iteration
+        mars_parking.inc = inc_actual
+        mars_parking.raan = raan_actual
 
-    inc_actual, raan_actual, h_hat, gamma, (inc_min, inc_max) = solve_achievable_plane(
-    S_hat, inc_desired, t_soi, branch=branch    
-    )
-    # keep mars_parking's plane in sync with what's actually achievable this iteration
-    mars_parking.inc = inc_actual
-    mars_parking.raan = raan_actual
+        B_hat = np.cross(S_hat, h_hat)
+        B_hat /= np.linalg.norm(B_hat)
 
-    B_hat = np.cross(S_hat, h_hat)
-    B_hat /= np.linalg.norm(B_hat)
+        rp_target = mars_parking.a.value * (1 - mars_parking.e.value)
+        B_mag = rp_target * np.sqrt(1 + (2*MARS_MU.value)/(rp_target * vinf_actual_mag**2))
+        N = np.array([0.0, 0.0, 1.0]) # B-plane T/R still ICRF Z -- unrelated to Mars pole, unchanged
+        T_raw = np.cross(S_hat, N)
+        T_norm = np.linalg.norm(T_raw)
+        if T_norm < 1e-8:
+            raise ValueError(f"Degenerate geometry: S_hat nearly parallel to ICRF Z (T-axis undefined)")
+        T_hat = T_raw / T_norm
+        R_hat = np.cross(S_hat, T_hat)
+        R_hat = np.cross(S_hat, T_hat)
+        BR_target = B_mag * np.dot(B_hat, R_hat)
+        BT_target = B_mag * np.dot(B_hat, T_hat)
 
-    rp_target = mars_parking.a.value * (1 - mars_parking.e.value)
-    B_mag = rp_target * np.sqrt(1 + (2*MARS_MU.value)/(rp_target * vinf_actual_mag**2))
-    N = np.array([0.0, 0.0, 1.0]) # B-plane T/R still ICRF Z -- unrelated to Mars pole, unchanged
-    T_hat = np.cross(S_hat, N); T_hat /= np.linalg.norm(T_hat)
-    R_hat = np.cross(S_hat, T_hat)
-    BR_target = B_mag * np.dot(B_hat, R_hat)
-    BT_target = B_mag * np.dot(B_hat, T_hat)
+        # actual B-plane result of this trial trajectory, same frame
+        rp, B_theta, BR, BT = Bplane2(r_periapsis, v_periapsis, MARS_MU.value)
 
-    # actual B-plane result of this trial trajectory, same frame
-    rp, B_theta, BR, BT = Bplane2(r_periapsis, v_periapsis, MARS_MU.value)
+    except ValueError as e:
+        print(f"WARNING: invalid B-plane state ({e})")
+        bplane_target_function._last_TOF = None
+        bplane_target_function._last_periapsis = None
+        bplane_target_function._last_target = np.array([1e9, 1e9]).reshape(2, 1)
+        return np.array([1e9, 1e9]).reshape(2, 1)
+    
     TOF_actual = (t_periapsis - departure_date).to_value('jd')
 
     # # stash the freshly computed target so differential_correction can read it back
@@ -1191,7 +1215,7 @@ x, f_x, error = differential_correction(
     targetting_function = bplane_target_function,
     function_args = (earth_parking, earth_soi, mars_soi, departure_date, arrival_date,
                       mars_parking, inc_desired, branch),
-    step_sizes = np.array([np.deg2rad(.01), np.deg2rad(.01), .01]).reshape(3, 1),
+    step_sizes = np.array([np.deg2rad(.01), np.deg2rad(.01), .001]).reshape(3, 1),
     tol = np.array([1, 1]).reshape(2, 1),
     max_i = 50,
     orbit = earth_parking)

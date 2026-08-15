@@ -649,7 +649,7 @@ mars_soi = sphere_of_influence(mars, SUN_MU)
 def Bplane2(r_periapsis,v_periapsis,mars_mu):
     v_mag = np.linalg.norm(v_periapsis)
     r_mag = np.linalg.norm(r_periapsis)
-    energy_term = v_mag**2 - 2*mars_mu/r_mag
+    energy_term = .5*v_mag**2 - mars_mu/r_mag
 
     if energy_term <= 0:
             # trial trajectory is bound (elliptical) at "periapsis" -- not a valid
@@ -657,11 +657,11 @@ def Bplane2(r_periapsis,v_periapsis,mars_mu):
             raise ValueError(f"Non-hyperbolic periapsis state (specific energy={energy_term/2:.6f} km²/s² <= 0); "
                             f"cannot compute B-plane parameters")
 
-    vinf_arrival = np.sqrt(energy_term)
+    vinf_arrival = np.sqrt(2*energy_term)
     h = np.cross(r_periapsis, v_periapsis)
     h_hat = h / np.linalg.norm(h)    
     
-    e_vec = (1/mars_mu) * (vinf_arrival**2 * r_periapsis - np.dot(r_periapsis,v_periapsis)*v_periapsis) - r_periapsis/np.linalg.norm(r_periapsis)
+    e_vec = (1/mars_mu) * (v_mag**2 * r_periapsis - np.dot(r_periapsis,v_periapsis)*v_periapsis) - r_periapsis/np.linalg.norm(r_periapsis)
     e = np.linalg.norm(e_vec)       
     if e <= 1.0:
         raise ValueError(f"Non-hyperbolic eccentricity e={e:.6f} <= 1; cannot compute B-plane parameters")
@@ -760,13 +760,6 @@ def orbit_to_inertial_state(orbit):
     r_eci, v_eci = perif_2_eci(r_pqw, v_pqw, orbit.inc, orbit.raan, orbit.aop)
     return r_eci,v_eci
 
-# r_eci, v_eci = orbit_to_inertial_state(earth_parking)
-# dV0 = np.sqrt(Vinf_departure_mag**2 + (2*EARTH_MU.value/np.linalg.norm(r_eci))) - np.linalg.norm(v_eci)
-# v_postburn_eci = v_eci + (dV0 * (v_eci/np.linalg.norm(v_eci)))  # apply prograde delta 
-# hyp_parameters = hyperbolic_parameters(r_eci, v_postburn_eci, earth_parking)
-# vinf_eci = calculate_vinf_departure(dV0, earth_parking, hyp_parameters)
-# print(f'Calculated Vinf departure vector from analytical function: {vinf_eci} km')
-
 # ------------------------------------------------------------------------Step 3: Differential Correction: targetting Lamberts Vinf for better initial conditions ----------------------------------------------------------------------
 print("\n------------------------------------------------------------------------------------------------Phase 1: Vinf Targetting------------------------------------------------------------------------------------------------n")
 
@@ -787,43 +780,34 @@ def vinf_target_function(x,fun_args):
 
 # Forward differences
 def sensitivity_matrix(x, target_function, fun_args, step_sizes, f_x):
+    """ Calculate the numerical Jacobian using forward finite differences.
+    Columns:
+    J[:,0] = dF/d(RAAN)
+    J[:,1] = dF/d(AOP)
+    J[:,2] = dF/d(dV) """
     orbit = fun_args[0]
-    # Reshape dt_input args into dt vectors
+    # Perturbation vectors
     dt_rann_ar = np.array([step_sizes[0][0], 0,0]).reshape(3, 1)
     dt_aop_ar = np.array([0, step_sizes[1][0],0]).reshape(3, 1)
     dt_dV_ar = np.array([0, 0, step_sizes[2][0]]).reshape(3, 1)
+    if target_function.__name__ == "bplane_target_function":
+        print(f"Perturbing Earth Parking orbit RAAN run:")
     # equations from AGI newtons method paper 
     dt_raan_col = (1/(step_sizes[0][0]))*(target_function( x + dt_rann_ar,fun_args) - f_x)
     # Reset orbit to x before each call so state doesn't bleed between columns
     orbit.raan = x[0][0]  # reset
     orbit.aop  = x[1][0]  # reset
+    if target_function.__name__ == "bplane_target_function":
+        print(f"Perturning Earth parking orbit AOP run: ")
     dt_aop_col = (1/(step_sizes[1][0]))*(target_function( x + dt_aop_ar,fun_args) - f_x)
     orbit.raan = x[0][0]  # reset
     orbit.aop  = x[1][0]  # reset
+    if target_function.__name__ == "bplane_target_function":
+        print(f"Perturbing dV at Earth burn run:")
     dt_dV_col = (1/(step_sizes[2][0]))*(target_function(x + dt_dV_ar,fun_args) - f_x)
     orbit.raan = x[0][0]  # reset
     orbit.aop  = x[1][0]  # reset
     return np.block([dt_raan_col, dt_aop_col, dt_dV_col])
-
-## central difference takes double the time since calls the funcitons twice per column
-# def sensitivity_matrix(x, target_function, fun_args, step_sizes, f_x):
-#     orbit = fun_args[0]
-#     # Reshape dt_input args into dt vectors
-#     dt_rann_ar = np.array([step_sizes[0][0], 0,0]).reshape(3, 1)
-#     dt_aop_ar = np.array([0, step_sizes[1][0],0]).reshape(3, 1)
-#     dt_dV_ar = np.array([0, 0, step_sizes[2][0]]).reshape(3, 1)
-#     # equations from AGI newtons method paper 
-#     dt_raan_col = (1/( 2 * step_sizes[0][0]))*(target_function( x + dt_rann_ar,fun_args) - target_function( x - dt_rann_ar,fun_args))
-#     # Reset orbit to x before each call so state doesn't bleed between columns
-#     orbit.raan = x[0][0]  # reset
-#     orbit.aop  = x[1][0]  # reset
-#     dt_aop_col = (1/(2 * step_sizes[1][0]))*(target_function( x + dt_aop_ar,fun_args) - target_function( x - dt_aop_ar,fun_args))
-#     orbit.raan = x[0][0]  # reset
-#     orbit.aop  = x[1][0]  # reset
-#     dt_dV_col = (1/(2 *step_sizes[2][0]))*(target_function(x + dt_dV_ar,fun_args) - target_function(x - dt_dV_ar,fun_args))
-#     orbit.raan = x[0][0]  # reset
-#     orbit.aop  = x[1][0]  # reset
-#     return np.block([dt_raan_col, dt_aop_col, dt_dV_col])
 
 def differential_correction(
         x0,
@@ -842,12 +826,15 @@ def differential_correction(
         orbit.aop  = x[1][0]
 
         f_x = targetting_function(x, function_args)
-
-        # NEW: if the target function computed a fresh target this call, use it
-        y_d_current = getattr(targetting_function, '_last_target', y_d)
-        
+        y_d_current = getattr(targetting_function, '_last_target', y_d)        
         error = (f_x-y_d_current)
-        J = sensitivity_matrix(x,targetting_function, function_args, step_sizes, f_x)    
+        J = sensitivity_matrix(x,targetting_function, function_args, step_sizes, f_x) 
+
+        # --- DIAGNOSTICS: paste here ---
+        singular_values = np.linalg.svd(J, compute_uv=False)
+        cond_number = np.linalg.cond(J)
+        print(f"    J singular values: {singular_values} | cond(J) = {cond_number:.3e}")
+
         x_k = x - np.linalg.pinv(J)@error
 
         if targetting_function == vinf_target_function:
@@ -955,21 +942,8 @@ def mars_position_target_function(x,fun_args):
     return r_sats[-1].reshape(3,1)
 
 # actual code for running
-
-x , f_x, error = differential_correction(
-    x0 = np.array([x[0][0], x[1][0], x[2][0]]).reshape(3, 1),
-    y_d = r2_mars.reshape(3,1),
-    targetting_function = mars_position_target_function,
-    function_args = (earth_parking, departure_date, arrival_date),
-    step_sizes = np.array([np.deg2rad(.01), np.deg2rad(.01), .01]).reshape(3, 1),
-    tol = np.array([10e-4, 10e-4, 10e-4]).reshape(3, 1),
-    max_i = 50,
-    orbit = earth_parking
-)
-
-# # temp code using the alr converged values from running true differntial correciton to same time
 # x , f_x, error = differential_correction(
-#     x0 = np.array([np.deg2rad(91.12437422103665), np.deg2rad(265.0703882273781), 3.6368109087080462]).reshape(3, 1),
+#     x0 = np.array([x[0][0], x[1][0], x[2][0]]).reshape(3, 1),
 #     y_d = r2_mars.reshape(3,1),
 #     targetting_function = mars_position_target_function,
 #     function_args = (earth_parking, departure_date, arrival_date),
@@ -978,16 +952,28 @@ x , f_x, error = differential_correction(
 #     max_i = 50,
 #     orbit = earth_parking
 # )
-
-print(f"\nParking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = {np.rad2deg(x[1][0])} deg | dV = {x[2][0]} km/s\n")
-print(f'Heliocentric Position of Spacecraft at Mars arrival TOF: {f_x.flatten()} km with error of {error.flatten()} km compared to the target position {r2_mars.flatten()} km \n')
-dV = x[2][0]
+# print(f"\nParking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = {np.rad2deg(x[1][0])} deg | dV = {x[2][0]} km/s\n")
+# print(f'Heliocentric Position of Spacecraft at Mars arrival TOF: {f_x.flatten()} km with error of {error.flatten()} km compared to the target position {r2_mars.flatten()} km \n')
+# dV = x[2][0]
 
 '''
+USE THESE FOR above funciton call to fast track work
 iteration 6
-[CONVERGED] ERROR:[-7.16149807e-05 -7.35819340e-05 -3.23206186e-05]
-Parking Orbit RAAN = 91.12437422103665 deg  | Parking Orbit AOP = 265.0703882273781 deg | dV = 3.6368109087080462 km/s'''
+[CONVERGED] ERROR:[-7.94380903e-05 -7.21514225e-05 -3.13818455e-05]
+Parking Orbit RAAN = 91.12438014889646 deg  | Parking Orbit AOP = 265.06900325166424 deg | dV = 3.6365642436654273 km/s'''
 
+x , f_x, error = differential_correction(
+    x0 = np.array([np.deg2rad(91.12438014889646), np.deg2rad(265.06900325166424), 3.6365642436654273]).reshape(3, 1),
+    y_d = r2_mars.reshape(3,1),
+    targetting_function = mars_position_target_function,
+    function_args = (earth_parking, departure_date, arrival_date),
+    step_sizes = np.array([np.deg2rad(.01), np.deg2rad(.01), .01]).reshape(3, 1),
+    tol = np.array([10e-4, 10e-4, 10e-4]).reshape(3, 1),
+    max_i = 50,
+    orbit = earth_parking
+)
+print(f"\nParking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = {np.rad2deg(x[1][0])} deg | dV = {x[2][0]} km/s\n")
+print(f'Heliocentric Position of Spacecraft at Mars arrival TOF: {f_x.flatten()} km with error of {error.flatten()} km compared to the target position {r2_mars.flatten()} km \n')
 # --------------------------------------------------------------------------------------Step 5: Differential Correction: Mars B-Plane Targettings---------------------------------------------------------------------------------------
 print("\n------------------------------------------------------------------------------------------------Phase 3: B-Plane Targetting ------------------------------------------------------------------------------------------------n")
 # x = np.array([np.deg2rad(91.12437422103665), np.deg2rad(265.0703882273781), 3.6368109087080462]).reshape(3, 1)
@@ -996,21 +982,16 @@ def mars_pole_icrs(t):
     """
     Mars north pole unit vector in the ICRF/J2000 equatorial frame,
     from IAU WGCCRE rotational elements (Archinal et al., 2009/2015).
-    t: astropy Time
     """
     T = (t.tdb.jd - 2451545.0) / 36525.0  # Julian centuries from J2000 TDB
     alpha_0 = np.deg2rad(317.68143 - 0.1061 * T)   # pole RA
     delta_0 = np.deg2rad(52.88650 - 0.0609 * T)    # pole Dec
-    # equatorial pole direction of Mars
     N = np.array([ 
         np.cos(delta_0) * np.cos(alpha_0),
         np.cos(delta_0) * np.sin(alpha_0),
         np.sin(delta_0)
     ])
-
     #  This is exactly the same conversion you'd use to turn any RA/Dec sky position into an ICRF unit vector 
-    #  δ₀ plays the role of "latitude off the ICRF equatorial plane 
-    #  α₀ the longitude around the ICRF Z-axis.
     return N / np.linalg.norm(N)
 
 def mars_equatorial_frame(t):
@@ -1076,7 +1057,7 @@ def bplane_target_function(x, fun_args):
         bplane_target_function._last_periapsis = None
         bplane_target_function._last_target = np.array([1e9, 1e9]).reshape(2, 1)
         return np.array([1e9, 1e9]).reshape(2, 1)
-
+    
     r_periapsis, v_periapsis, t_periapsis = periapsis_state
 
     try: 
@@ -1128,9 +1109,6 @@ def bplane_target_function(x, fun_args):
     
     TOF_actual = (t_periapsis - departure_date).to_value('jd')
 
-    # # stash the freshly computed target so differential_correction can read it back
-    # bplane_target_function._last_target = np.array([BR_target, BT_target, 321]).reshape(3, 1)
-
     # TOF is a diagnostic now, not a residual target
     bplane_target_function._last_TOF = TOF_actual
     bplane_target_function._last_periapsis = (r_periapsis, v_periapsis, t_periapsis)
@@ -1138,24 +1116,35 @@ def bplane_target_function(x, fun_args):
 
     return np.array([BR, BT]).reshape(2, 1)
 
-# rp = 400+3396
-# BT_target = rp * np.sqrt(1+(2*MARS_MU.value/(rp*Vinf_arrival_mag**2)))  # from the equation for rp in terms of B and Vinf. rearranged to solve for B given rp and Vinf
 
-# # angular momentum of the satellite entering the SOI of mars
-# def h_hat_from_orbparm(inc,raan):  
-#     return np.array([np.sin(inc)*np.sin(raan), -np.sin(inc)*np.cos(raan), np.cos(inc)])
+inc_desired = np.deg2rad(93.0)   # whatever you actually want, checked against the achievable band
+branch = +1
 
-# h_target_orbit = h_hat_from_orbparm(mars_parking.inc, mars_parking.raan)
+# actual code to run - 08/13/2026
+x, f_x, error = differential_correction(
+    x0 = np.array([x[0][0], x[1][0], x[2][0]]).reshape(3, 1),
+    y_d = None,  # see note below — target now floats each call
+    targetting_function = bplane_target_function,
+    function_args = (earth_parking, earth_soi, mars_soi, departure_date, arrival_date,
+                      mars_parking, inc_desired, branch),
+    step_sizes = np.array([np.deg2rad(.01), np.deg2rad(.01), .001]).reshape(3, 1),
+    tol = np.array([1, 1]).reshape(2, 1),
+    max_i = 50,
+    orbit = earth_parking)
+
+'''[1] BR error: 4181.756605 km | BT error: -29797.896364 km | TOF (floating): 321.143 days
+    Computed: BR=11849.273236 km, BT=-28314.998451 km
+    Target:   BR=7667.516631 km, BT=1482.897913 km
+    RAAN=91.775541 deg | AOP=265.375756 deg | dV=3.642255 km/s
+    Mars Parking Orbit --> inc=93.000000 deg | raan=112.081161 deg'''
 
 
-""" 
-I never like what i did here - since i never knew what to actually target for b plane, i just used arbritary points
-now trying to actually calcualtue it for real 
 
-Take notice that i never use mars_parking orbit for anything. I just use the periapsis state from the n-body propagator to calculate the B plane parameters and then target those parameters.
-    my mars parking inc/raan dont mean anything. and my targetting isnt really aargeting anything
 
-S_hat is fixed by the interplanetary trajectory - the simple lambert soln and departure state already determine is b4 touching bplane. 
+
+
+
+"""  S_hat is fixed by the interplanetary trajectory - the simple lambert soln and departure state already determine is b4 touching bplane. 
     it lies in the hyperbolic orbital plane - h_hat dot S_hat = 0 
 
 " You don't get to pick an arbitrary (inc, raan) for mars_parking and hit it with a single periapsis burn 
@@ -1182,52 +1171,19 @@ orth explicitly computing the achievable-vs-desired misalignment so you know how
                     --> so your angular momentum now is h = h - dot(h,S_hat)*S_hat. Using this, compute b plane parameters. 
                 The mismatch between the actual angular momentum and the trimmed version is the angle between desired plane vs plane we're actually on.
                 this angle i the miniimum plane change you'd have to do to get into desired orbit. the angle is the min plane change your assuming by targgeting the br and bt from the trimmed h. wuithout doing a plane change burn. 
-                --> its "absorbing" a manuever cost that wasn't accounted for. 
-
-""" 
-# need to edit the function call 
-# last edit made was that to the differential_correction function where i added a line to define a new y_d
-# x, f_x, error = differential_correction(
-#     x0 = np.array([x[0][0], x[1][0], x[2][0]]).reshape(3, 1),
-#     y_d = np.array([0, BT_target, 321]).reshape(3, 1),  # target rp of 400 km and Btheta of 0 deg
-#     targetting_function = bplane_target_function,
-#     function_args = (earth_parking, earth_soi, mars_soi, departure_date, arrival_date),
-#     step_sizes = np.array([np.deg2rad(.01), np.deg2rad(.01), .01]).reshape(3, 1),
-#     tol = np.array([10, 10, .5/24]).reshape(3, 1),
-#     max_i = 50,
-#     orbit = earth_parking
-# )
+                --> its "absorbing" a manuever cost that wasn't accounted for. """ 
 
 # from OG code before this one
-#     [10] BR error: -5.61 km | BT error: -0.00 km | TOF error: -134.70 hrs
-#     Computed: BR=-5.61 km, BT=7892.60 km, TOF=315.39 days
-#     RAAN=93.8877 deg | AOP=261.7480 deg | dV=3.636564 km/s
-
-
-# will try this call now and comment the one above 
-
-inc_desired = np.deg2rad(93.0)   # whatever you actually want, checked against the achievable band
-branch = +1
-
-x, f_x, error = differential_correction(
-    x0 = np.array([x[0][0], x[1][0], x[2][0]]).reshape(3, 1),
-    y_d = None,  # see note below — target now floats each call
-    targetting_function = bplane_target_function,
-    function_args = (earth_parking, earth_soi, mars_soi, departure_date, arrival_date,
-                      mars_parking, inc_desired, branch),
-    step_sizes = np.array([np.deg2rad(.01), np.deg2rad(.01), .001]).reshape(3, 1),
-    tol = np.array([1, 1]).reshape(2, 1),
-    max_i = 50,
-    orbit = earth_parking)
-
 # [10] BR error: -5.565459 km | BT error: -0.001898 km | TOF error: -133.716667 hrs
 #     Computed: BR=-7781.537968 km, BT=436.135997 km, TOF=315.428472 days
 #     Target:   BR=-7775.972509 km, BT=436.137895 km, TOF=321.000000 days
 #     RAAN=94.080018 deg | AOP=261.551923 deg | dV=3.636564 km/s
 #     Mars Parking Orbit --> inc=93.000000 deg | raan=165.285414 deg
 
-""" 
-side notes 08/06/2026 From NASA guide to interplanetary trasnfers
+
+# 08/12/2026 - after making 3 pushes in a day - code keeps breaking after iter 2 - SVD doesnt converge. use these as initial conditions to fast track
+
+""" side notes 08/06/2026 From NASA guide to interplanetary trasnfers
 
 For flybys: 
 DAP  - planetary equatorial declination of incoming asymptote, of Vinf, gives measure of minimum possible inclination of flyby. 
@@ -1248,13 +1204,10 @@ The flyby is aimed at a point on the arrival target plane (B plane) --> plane pa
 
 IN PLANET EQUATORIAL FRAME cords: 
 right ascention of Mars ecliptic pole = 267.6227 deg
-delcination of ecliptic pole = 63.2838 deg 
-"""
+delcination of ecliptic pole = 63.2838 deg """
 
 
-'''
-plan for b plane targetting:
-    - some notes for myself: the B plane is a plane orthogonal/normal to the hyperbolic trajectory plane ( the incoming asymptote) and the initial hyperbolic excess velocity vector. 
+''' - some notes for myself: the B plane is a plane orthogonal/normal to the hyperbolic trajectory plane ( the incoming asymptote) and the initial hyperbolic excess velocity vector. 
         - normal to the vinf vector 
     - it allows s/c to have some specific hyperbolic trajectory for flyby or in our case: orbit capture
         B vector vector from target body COM to where the vinf hits b plane
@@ -1278,8 +1231,7 @@ Need to set up Mars Parking orbit
     1. iterate on the transfer V1 from departure: Perturb transfer_v1, propagate n-body to Mars SOI, measure B-plane error, iterate with Newton's method.
     2. Apply a small dV somewhere along the transfer, iterate on that [dvx, dvy, dvz] to minimize B-plane error.
 
-    For both, need to extract the point wherein the n-body propagtor outputs the position & velocity of the s/c when entering MARS SOi
-'''
+    For both, need to extract the point wherein the n-body propagtor outputs the position & velocity of the s/c when entering MARS SOi'''
 
 def capture_burn(r_periapsis, v_periapsis, mars_parking, mars_mu):
     """

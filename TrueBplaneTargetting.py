@@ -828,6 +828,10 @@ def differential_correction(
         f_x = targetting_function(x, function_args)
         y_d_current = getattr(targetting_function, '_last_target', y_d)        
         error = (f_x-y_d_current)
+
+        # snapshot nominal periapsis state before Jacobian perturbations overwrite it
+        nominal_periapsis = getattr(targetting_function, '_last_periapsis', None)
+
         J = sensitivity_matrix(x,targetting_function, function_args, step_sizes, f_x) 
 
         # --- DIAGNOSTICS: paste here ---
@@ -851,7 +855,10 @@ def differential_correction(
             print(f"    Target:   BR={y_d_current[0,0]:.6f} km, BT={y_d_current[1,0]:.6f} km")
             print(f"    RAAN={np.rad2deg(x[0][0]):.6f} deg | AOP={np.rad2deg(x[1][0]):.6f} deg | dV={x[2][0]:.6f} km/s")
             print(f"    Mars Parking Orbit --> inc={np.rad2deg(mars_parking.inc):.6f} deg | raan={np.rad2deg(mars_parking.raan):.6f} deg\n")
-
+            if nominal_periapsis is not None:
+                r_p_nom, v_p_nom, t_p_nom = nominal_periapsis
+                print(f"    Mars miss distance at periapsis: {np.linalg.norm(r_p_nom):.3f} km | "
+                    f"Velocity at periapsis: {np.linalg.norm(v_p_nom):.6f} km/s\n")
         x = x_k
         i += 1
 
@@ -1050,6 +1057,7 @@ def bplane_target_function(x, fun_args):
     r_eci, v_eci = orbit_to_inertial_state(orbit)
     v_postburn_eci = v_eci + (dV * (v_eci/np.linalg.norm(v_eci)))
     Nbody_prop = variable_nbody_propagtion(r_eci, v_postburn_eci, earth_soi, mars_soi, departure_date, arrival_date)
+    bplane_target_function._last_full_trajectory = Nbody_prop  # added for plotting
     periapsis_state = Nbody_prop['Leg 3 Mars Central']['periapsis']
     if periapsis_state is None:
         print("WARNING: periapsis not detected")
@@ -1128,7 +1136,7 @@ x, f_x, error = differential_correction(
     function_args = (earth_parking, earth_soi, mars_soi, departure_date, arrival_date,
                       mars_parking, inc_desired, branch),
     step_sizes = np.array([np.deg2rad(.01), np.deg2rad(.01), .001]).reshape(3, 1),
-    tol = np.array([1, 1]).reshape(2, 1),
+    tol = np.array([.001, .001]).reshape(2, 1),
     max_i = 50,
     orbit = earth_parking)
 
@@ -1259,3 +1267,4 @@ def capture_burn(r_periapsis, v_periapsis, mars_parking, mars_mu):
 
 r_peri, v_peri, t_peri = bplane_target_function._last_periapsis
 dV_MOI, dV_MOI_vec = capture_burn(r_peri, v_peri, mars_parking, MARS_MU.value)
+

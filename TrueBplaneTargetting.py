@@ -1144,7 +1144,17 @@ x, f_x, error = differential_correction(
     Computed: BR=11849.273236 km, BT=-28314.998451 km
     Target:   BR=7667.516631 km, BT=1482.897913 km
     RAAN=91.775541 deg | AOP=265.375756 deg | dV=3.642255 km/s
-    Mars Parking Orbit --> inc=93.000000 deg | raan=112.081161 deg'''
+    Mars Parking Orbit --> inc=93.000000 deg | raan=112.081161 deg
+    
+    [11] BR error: 0.000264 km | BT error: -0.000761 km | TOF (floating): 320.700 days
+    Computed: BR=7670.241817 km, BT=1499.531614 km
+    Target:   BR=7670.241553 km, BT=1499.532375 km
+    RAAN=91.680027 deg | AOP=265.334882 deg | dV=3.641548 km/s
+    Mars Parking Orbit --> inc=93.000000 deg | raan=112.274300 deg
+
+    Mars miss distance at periapsis: 3748.027 km | Velocity at periapsis: 5.435809 km/s
+
+[CONVERGED] ERROR:[ 0.0002643  -0.00076085]'''
 
 
 
@@ -1268,3 +1278,73 @@ def capture_burn(r_periapsis, v_periapsis, mars_parking, mars_mu):
 r_peri, v_peri, t_peri = bplane_target_function._last_periapsis
 dV_MOI, dV_MOI_vec = capture_burn(r_peri, v_peri, mars_parking, MARS_MU.value)
 
+def propagate_two_body(r0,v0,mu,t0,periods=1,dt = 60):
+    r_mag = np.linalg.norm(r0)
+    v_mag = np.linalg.norm(v0)
+    a = -mu/(2*(.5*v_mag**2 - (mu/r_mag)))
+    T = 2*np.pi * np.sqrt(a**3/mu)
+    dt = TimeDelta(dt,format='sec')
+    tf = t0 + TimeDelta(periods * T, format = 'sec')
+    t = t0
+    y = np.concatenate((r0, v0))
+    r_list, v_list, t_list = [r0.copy()], [v0.copy()], [t0]
+    while t < tf:
+        y = RK4_single_step(y_dot_2body_earth, dt, t, y, mu)
+        t = t + dt
+        r_list.append(y[:3].copy()) # r = y[:3]
+        v_list.append(y[3:].copy()) # v = y[3:6]
+        t_list.append(t)
+    return np.array(r_list), np.array(v_list), t_list, a, T
+
+# 1. Earth parking orbit, pre-burn, 1 period
+r_eci_preburn, v_eci_preburn = orbit_to_inertial_state(earth_parking)
+r_earthpark, v_earthpark, t_earthpark, a_earthpark, T_earthpark = propagate_two_body(
+    r_eci_preburn, v_eci_preburn, EARTH_MU.value, departure_date, periods=1.0, dt=30
+)
+
+# --- 2. Leg 1: Earth-centered departure (post-burn)
+traj = bplane_target_function._last_full_trajectory
+leg1_r = np.array(traj['Leg 1 Earth Central']['r'])
+leg1_t = traj['Leg 1 Earth Central']['t']
+
+# --- 3. Leg 2: Heliocentric Earth->Mars
+leg2_r = np.array(traj['Leg 2 Heliocentric']['r'])
+leg2_t = traj['Leg 2 Heliocentric']['t']
+
+# --- 4. Leg 3: Mars-centered incoming
+leg3_r = np.array(traj['Leg 3 Mars Central']['r'])
+leg3_t = traj['Leg 3 Mars Central']['t']
+
+# --- 5. Post-MOI capture orbit, 1 period after burn
+v_post_burn = v_peri + dV_MOI_vec
+r_park, v_park, t_park, a_park, T_park = propagate_two_body(
+    r_peri, v_post_burn, MARS_MU.value, t_peri, periods=1.0, dt=30
+)
+# --- Save everything to disk ---
+import pickle
+
+def times_to_jd(t_list):
+    return np.array([t.jd for t in t_list])
+
+mission_data = {
+    'earth_parking': {'r': r_earthpark, 'v': v_earthpark, 't_jd': times_to_jd(t_earthpark),
+                       'a': a_earthpark, 'T': T_earthpark},
+    'leg1_earth_centered': {'r': leg1_r, 't_jd': times_to_jd(leg1_t)},
+    'leg2_heliocentric':   {'r': leg2_r, 't_jd': times_to_jd(leg2_t)},
+    'leg3_mars_centered':  {'r': leg3_r, 't_jd': times_to_jd(leg3_t)},
+    'capture_orbit': {'r': r_park, 'v': v_park, 't_jd': times_to_jd(t_park),
+                       'a': a_park, 'T': T_park},
+    'key_points': {
+        'r_peri': r_peri, 'v_peri': v_peri, 't_peri_jd': t_peri.jd,
+        'dV_MOI_vec': dV_MOI_vec, 'dV_MOI_mag': dV_MOI,
+        'earth_soi': earth_soi, 'mars_soi': mars_soi,
+        'departure_date_jd': departure_date.jd,
+    }
+}
+
+with open('mission_data.pkl', 'wb') as f:
+    pickle.dump(mission_data, f)
+
+print("Saved mission_data.pkl")
+
+code = 1

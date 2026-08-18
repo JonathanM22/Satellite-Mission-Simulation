@@ -853,8 +853,8 @@ def differential_correction(
             print(f"[{i}] BR error: {error[0,0]:.6f} km | BT error: {error[1,0]:.6f} km | TOF (floating): {tof_str}")
             print(f"    Computed: BR={f_x[0,0]:.6f} km, BT={f_x[1,0]:.6f} km")
             print(f"    Target:   BR={y_d_current[0,0]:.6f} km, BT={y_d_current[1,0]:.6f} km")
-            print(f"    RAAN={np.rad2deg(x[0][0]):.6f} deg | AOP={np.rad2deg(x[1][0]):.6f} deg | dV={x[2][0]:.6f} km/s")
-            print(f"    Mars Parking Orbit --> inc={np.rad2deg(mars_parking.inc):.6f} deg | raan={np.rad2deg(mars_parking.raan):.6f} deg\n")
+            print(f"    RAAN={np.rad2deg(x[0][0]):.10f} deg | AOP={np.rad2deg(x[1][0]):.10f} deg | dV={x[2][0]:.10f} km/s")
+            print(f"    Mars Parking Orbit --> inc={np.rad2deg(mars_parking.inc):.10f} deg | raan={np.rad2deg(mars_parking.raan):.10f} deg\n")
             if nominal_periapsis is not None:
                 r_p_nom, v_p_nom, t_p_nom = nominal_periapsis
                 print(f"    Mars miss distance at periapsis: {np.linalg.norm(r_p_nom):.3f} km | "
@@ -870,8 +870,8 @@ def differential_correction(
             print(f"[MAX ITER] ERROR:{error.flatten()}")
             break
 
-    orbit.raan = x[0][0]  # reset
-    orbit.aop  = x[1][0]  # reset
+    orbit.raan = x[0][0]  
+    orbit.aop  = x[1][0]  
     dV = x[2][0]
 
     f_x = targetting_function(x, function_args)
@@ -981,6 +981,7 @@ x , f_x, error = differential_correction(
 )
 print(f"\nParking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = {np.rad2deg(x[1][0])} deg | dV = {x[2][0]} km/s\n")
 print(f'Heliocentric Position of Spacecraft at Mars arrival TOF: {f_x.flatten()} km with error of {error.flatten()} km compared to the target position {r2_mars.flatten()} km \n')
+dV = x[2][0]
 # --------------------------------------------------------------------------------------Step 5: Differential Correction: Mars B-Plane Targettings---------------------------------------------------------------------------------------
 print("\n------------------------------------------------------------------------------------------------Phase 3: B-Plane Targetting ------------------------------------------------------------------------------------------------n")
 # x = np.array([np.deg2rad(91.12437422103665), np.deg2rad(265.0703882273781), 3.6368109087080462]).reshape(3, 1)
@@ -1128,9 +1129,21 @@ def bplane_target_function(x, fun_args):
 inc_desired = np.deg2rad(93.0)   # whatever you actually want, checked against the achievable band
 branch = +1
 
-# actual code to run - 08/13/2026
+# # actual code to run - 08/13/2026
+# x, f_x, error = differential_correction(
+#     x0 = np.array([x[0][0], x[1][0], x[2][0]]).reshape(3, 1),
+#     y_d = None,  # see note below — target now floats each call
+#     targetting_function = bplane_target_function,
+#     function_args = (earth_parking, earth_soi, mars_soi, departure_date, arrival_date,
+#                       mars_parking, inc_desired, branch),
+#     step_sizes = np.array([np.deg2rad(.01), np.deg2rad(.01), .001]).reshape(3, 1),
+#     tol = np.array([.001, .001]).reshape(2, 1),
+#     max_i = 50,
+#     orbit = earth_parking)
+
+# Shortcut to already converged
 x, f_x, error = differential_correction(
-    x0 = np.array([x[0][0], x[1][0], x[2][0]]).reshape(3, 1),
+    x0 = np.array([np.deg2rad(91.68002603420462), np.deg2rad(265.3348837832464), 3.64154769]).reshape(3, 1),
     y_d = None,  # see note below — target now floats each call
     targetting_function = bplane_target_function,
     function_args = (earth_parking, earth_soi, mars_soi, departure_date, arrival_date,
@@ -1140,6 +1153,9 @@ x, f_x, error = differential_correction(
     max_i = 50,
     orbit = earth_parking)
 
+dV = x[2][0]
+
+# results from nonshortcut code b4 fixing diff eq 08/17
 '''[1] BR error: 4181.756605 km | BT error: -29797.896364 km | TOF (floating): 321.143 days
     Computed: BR=11849.273236 km, BT=-28314.998451 km
     Target:   BR=7667.516631 km, BT=1482.897913 km
@@ -1157,8 +1173,16 @@ x, f_x, error = differential_correction(
 [CONVERGED] ERROR:[ 0.0002643  -0.00076085]'''
 
 
+# result from shortcut code above b4 fixing diff eq 08/17
+'''[3] BR error: -0.000288 km | BT error: 0.000815 km | TOF (floating): 320.700 days
+    Computed: BR=7670.241394 km, BT=1499.533098 km
+    Target:   BR=7670.241682 km, BT=1499.532283 km
+    RAAN=91.6800260216 deg | AOP=265.3348838024 deg | dV=3.6415476865 km/s
+    Mars Parking Orbit --> inc=93.0000000000 deg | raan=112.2742990547 deg
 
+    Mars miss distance at periapsis: 3747.986 km | Velocity at periapsis: 5.435832 km/s
 
+[CONVERGED] ERROR:[-0.00028783  0.00081502]'''
 
 
 
@@ -1191,15 +1215,6 @@ orth explicitly computing the achievable-vs-desired misalignment so you know how
                 this angle i the miniimum plane change you'd have to do to get into desired orbit. the angle is the min plane change your assuming by targgeting the br and bt from the trimmed h. wuithout doing a plane change burn. 
                 --> its "absorbing" a manuever cost that wasn't accounted for. """ 
 
-# from OG code before this one
-# [10] BR error: -5.565459 km | BT error: -0.001898 km | TOF error: -133.716667 hrs
-#     Computed: BR=-7781.537968 km, BT=436.135997 km, TOF=315.428472 days
-#     Target:   BR=-7775.972509 km, BT=436.137895 km, TOF=321.000000 days
-#     RAAN=94.080018 deg | AOP=261.551923 deg | dV=3.636564 km/s
-#     Mars Parking Orbit --> inc=93.000000 deg | raan=165.285414 deg
-
-
-# 08/12/2026 - after making 3 pushes in a day - code keeps breaking after iter 2 - SVD doesnt converge. use these as initial conditions to fast track
 
 """ side notes 08/06/2026 From NASA guide to interplanetary trasnfers
 
@@ -1278,61 +1293,112 @@ def capture_burn(r_periapsis, v_periapsis, mars_parking, mars_mu):
 r_peri, v_peri, t_peri = bplane_target_function._last_periapsis
 dV_MOI, dV_MOI_vec = capture_burn(r_peri, v_peri, mars_parking, MARS_MU.value)
 
-def propagate_two_body(r0,v0,mu,t0,periods=1,dt = 60):
+def propagate_two_body(r0,v0,mu,t0,dt = 60, parking_orbit = 'Earth'):
     r_mag = np.linalg.norm(r0)
     v_mag = np.linalg.norm(v0)
     a = -mu/(2*(.5*v_mag**2 - (mu/r_mag)))
     T = 2*np.pi * np.sqrt(a**3/mu)
+    n_steps = int(T / dt)
     dt = TimeDelta(dt,format='sec')
-    tf = t0 + TimeDelta(periods * T, format = 'sec')
-    t = t0
+
+
+    if parking_orbit == 'Mars':
+        t0 = t0
+    elif parking_orbit == 'Earth':
+        t0 = t0 - TimeDelta(T, format='sec')
+    else:
+        raise ValueError("parking_orbit must be 'Earth' or 'Mars'")
+    
     y = np.concatenate((r0, v0))
+    t = t0
     r_list, v_list, t_list = [r0.copy()], [v0.copy()], [t0]
-    while t < tf:
+    for i in range(n_steps):
         y = RK4_single_step(y_dot_2body_earth, dt, t, y, mu)
         t = t + dt
         r_list.append(y[:3].copy()) # r = y[:3]
         v_list.append(y[3:].copy()) # v = y[3:6]
         t_list.append(t)
-    return np.array(r_list), np.array(v_list), t_list, a, T
+    return np.array(r_list), np.array(v_list), t_list , a ,T
 
-# 1. Earth parking orbit, pre-burn, 1 period
-r_eci_preburn, v_eci_preburn = orbit_to_inertial_state(earth_parking)
-r_earthpark, v_earthpark, t_earthpark, a_earthpark, T_earthpark = propagate_two_body(
-    r_eci_preburn, v_eci_preburn, EARTH_MU.value, departure_date, periods=1.0, dt=30
-)
-
-# --- 2. Leg 1: Earth-centered departure (post-burn)
-traj = bplane_target_function._last_full_trajectory
-leg1_r = np.array(traj['Leg 1 Earth Central']['r'])
-leg1_t = traj['Leg 1 Earth Central']['t']
-
-# --- 3. Leg 2: Heliocentric Earth->Mars
-leg2_r = np.array(traj['Leg 2 Heliocentric']['r'])
-leg2_t = traj['Leg 2 Heliocentric']['t']
-
-# --- 4. Leg 3: Mars-centered incoming
-leg3_r = np.array(traj['Leg 3 Mars Central']['r'])
-leg3_t = traj['Leg 3 Mars Central']['t']
-
-# --- 5. Post-MOI capture orbit, 1 period after burn
-v_post_burn = v_peri + dV_MOI_vec
-r_park, v_park, t_park, a_park, T_park = propagate_two_body(
-    r_peri, v_post_burn, MARS_MU.value, t_peri, periods=1.0, dt=30
-)
-# --- Save everything to disk ---
-import pickle
+def subsample_indices(n, target=300):
+    """Keeps animation frame counts and pickle size manageable."""
+    if n <= target:
+        return np.arange(n)
+    stride = max(1, n // target)
+    idx = np.arange(0, n, stride)
+    if idx[-1] != n - 1:
+        idx = np.append(idx, n - 1)
+    return idx
 
 def times_to_jd(t_list):
     return np.array([t.jd for t in t_list])
 
+# --- 1. Earth parking orbit: construct 1 period before departure, propagate forward TO departure ---
+r_eci_preburn, v_eci_preburn = orbit_to_inertial_state(earth_parking)  # state AT departure (burn point)
+# propagating forward one full period returns to this exact state at departure_date
+r_earthpark_full, v_earthpark_full, t_earthpark_full, a_earthpark, T_earthpark = propagate_two_body(
+    r_eci_preburn, v_eci_preburn, EARTH_MU.value, departure_date, dt=30, parking_orbit ='Earth')
+
+idx_ep = subsample_indices(len(r_earthpark_full))   # e.g. array([0, 6, 12, ..., 179])
+r_earthpark = r_earthpark_full[idx_ep]              # pick those rows out of the position array
+t_earthpark = [t_earthpark_full[i] for i in idx_ep] # pick the matching timestamps (list, not array, since these are astropy Time objects)
+
+# --- 2. Leg 1: Earth-centered departure (post-burn)
+traj = bplane_target_function._last_full_trajectory
+leg1_r_full = np.array(traj['Leg 1 Earth Central']['r'])
+leg1_t_full = traj['Leg 1 Earth Central']['t']
+idx1 = subsample_indices(len(leg1_r_full))
+leg1_r = leg1_r_full[idx1]
+leg1_t = [leg1_t_full[i] for i in idx1]
+
+# --- 3. Leg 2: Heliocentric Earth->Mars
+leg2_r_full = np.array(traj['Leg 2 Heliocentric']['r'])
+leg2_t_full = traj['Leg 2 Heliocentric']['t']
+idx2 = subsample_indices(len(leg2_r_full))
+leg2_r = leg2_r_full[idx2]
+leg2_t = [leg2_t_full[i] for i in idx2]
+
+# --- 4. Leg 3: Mars-centered incoming
+leg3_r_full = np.array(traj['Leg 3 Mars Central']['r'])
+leg3_t_full = traj['Leg 3 Mars Central']['t']
+idx3 = subsample_indices(len(leg3_r_full))
+leg3_r = leg3_r_full[idx3]
+leg3_t = [leg3_t_full[i] for i in idx3]
+
+# --- Earth & Mars heliocentric position tracks, sampled at Leg 2's times ---
+# (needed so the heliocentric plot can show Earth/Mars moving during transfer)
+earth_track_r = []
+mars_track_r = []
+for t_local in leg2_t:
+    r_earth_b, _ = get_body_barycentric_posvel('earth', t_local)
+    r_mars_b, _  = get_body_barycentric_posvel('mars', t_local)
+    r_sun_b, _   = get_body_barycentric_posvel('sun', t_local)
+    earth_track_r.append((r_earth_b.xyz - r_sun_b.xyz).to(u.km).value)
+    mars_track_r.append((r_mars_b.xyz - r_sun_b.xyz).to(u.km).value)
+earth_track_r = np.array(earth_track_r)
+mars_track_r = np.array(mars_track_r)
+
+# --- 5. Post-MOI capture orbit, 1 period after burn
+v_post_burn = v_peri + dV_MOI_vec
+r_park_full, v_park_full, t_park_full, a_park, T_park = propagate_two_body(
+    r_peri, v_post_burn, MARS_MU.value, t_peri, dt=30, parking_orbit ='Mars')
+
+idx_cap = subsample_indices(len(r_park_full))
+r_park = r_park_full[idx_cap]
+t_park = [t_park_full[i] for i in idx_cap]
+
+# --- Save everything to disk ---
+import pickle
+
 mission_data = {
-    'earth_parking': {'r': r_earthpark, 'v': v_earthpark, 't_jd': times_to_jd(t_earthpark),
+    'earth_parking': {'r': r_earthpark, 't_jd': times_to_jd(t_earthpark),
                        'a': a_earthpark, 'T': T_earthpark},
     'leg1_earth_centered': {'r': leg1_r, 't_jd': times_to_jd(leg1_t)},
     'leg2_heliocentric':   {'r': leg2_r, 't_jd': times_to_jd(leg2_t)},
+    'earth_track': {'r': earth_track_r, 't_jd': times_to_jd(leg2_t)},
+    'mars_track':  {'r': mars_track_r, 't_jd': times_to_jd(leg2_t)},
     'leg3_mars_centered':  {'r': leg3_r, 't_jd': times_to_jd(leg3_t)},
-    'capture_orbit': {'r': r_park, 'v': v_park, 't_jd': times_to_jd(t_park),
+    'capture_orbit': {'r': r_park, 't_jd': times_to_jd(t_park),
                        'a': a_park, 'T': T_park},
     'key_points': {
         'r_peri': r_peri, 'v_peri': v_peri, 't_peri_jd': t_peri.jd,

@@ -839,8 +839,6 @@ def differential_correction(
         cond_number = np.linalg.cond(J)
         print(f"    J singular values: {singular_values} | cond(J) = {cond_number:.3e}")
 
-        x_k = x - np.linalg.pinv(J)@error
-
         if targetting_function == vinf_target_function:
             print(f"[{i}] Difference between computed and target Vinf: {error.flatten()} km/s --> {np.linalg.norm(error.flatten()):.6f} km/s")
             print(f"Parking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = {np.rad2deg(x[1][0])} deg | dV = {x[2][0]} km/s\n")
@@ -859,12 +857,15 @@ def differential_correction(
                 r_p_nom, v_p_nom, t_p_nom = nominal_periapsis
                 print(f"    Mars miss distance at periapsis: {np.linalg.norm(r_p_nom):.3f} km | "
                     f"Velocity at periapsis: {np.linalg.norm(v_p_nom):.6f} km/s\n")
-        x = x_k
-        i += 1
+
 
         if np.all(np.abs(error) < tol):
-            print(f"[CONVERGED] ERROR:{error.flatten()}")
-            break
+                    print(f"[CONVERGED] ERROR:{error.flatten()}")
+                    break
+
+        x_k = x - np.linalg.pinv(J)@error
+        x = x_k
+        i += 1
 
         if i > max_i:
             print(f"[MAX ITER] ERROR:{error.flatten()}")
@@ -874,6 +875,7 @@ def differential_correction(
     orbit.aop  = x[1][0]  
     dV = x[2][0]
 
+    # costs 1 extra run, but reruns using current X value.
     f_x = targetting_function(x, function_args)
     y_d_current = getattr(targetting_function, '_last_target', y_d)
     error = (f_x-y_d_current)
@@ -949,28 +951,8 @@ def mars_position_target_function(x,fun_args):
     return r_sats[-1].reshape(3,1)
 
 # actual code for running
-# x , f_x, error = differential_correction(
-#     x0 = np.array([x[0][0], x[1][0], x[2][0]]).reshape(3, 1),
-#     y_d = r2_mars.reshape(3,1),
-#     targetting_function = mars_position_target_function,
-#     function_args = (earth_parking, departure_date, arrival_date),
-#     step_sizes = np.array([np.deg2rad(.01), np.deg2rad(.01), .01]).reshape(3, 1),
-#     tol = np.array([10e-4, 10e-4, 10e-4]).reshape(3, 1),
-#     max_i = 50,
-#     orbit = earth_parking
-# )
-# print(f"\nParking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = {np.rad2deg(x[1][0])} deg | dV = {x[2][0]} km/s\n")
-# print(f'Heliocentric Position of Spacecraft at Mars arrival TOF: {f_x.flatten()} km with error of {error.flatten()} km compared to the target position {r2_mars.flatten()} km \n')
-# dV = x[2][0]
-
-'''
-USE THESE FOR above funciton call to fast track work
-iteration 6
-[CONVERGED] ERROR:[-7.94380903e-05 -7.21514225e-05 -3.13818455e-05]
-Parking Orbit RAAN = 91.12438014889646 deg  | Parking Orbit AOP = 265.06900325166424 deg | dV = 3.6365642436654273 km/s'''
-
 x , f_x, error = differential_correction(
-    x0 = np.array([np.deg2rad(91.12438014889646), np.deg2rad(265.06900325166424), 3.6365642436654273]).reshape(3, 1),
+    x0 = np.array([x[0][0], x[1][0], x[2][0]]).reshape(3, 1),
     y_d = r2_mars.reshape(3,1),
     targetting_function = mars_position_target_function,
     function_args = (earth_parking, departure_date, arrival_date),
@@ -982,6 +964,26 @@ x , f_x, error = differential_correction(
 print(f"\nParking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = {np.rad2deg(x[1][0])} deg | dV = {x[2][0]} km/s\n")
 print(f'Heliocentric Position of Spacecraft at Mars arrival TOF: {f_x.flatten()} km with error of {error.flatten()} km compared to the target position {r2_mars.flatten()} km \n')
 dV = x[2][0]
+
+# '''
+# USE THESE FOR above funciton call to fast track work
+# iteration 6
+# [CONVERGED] ERROR:[-7.94380903e-05 -7.21514225e-05 -3.13818455e-05]
+# Parking Orbit RAAN = 91.12438014889646 deg  | Parking Orbit AOP = 265.06900325166424 deg | dV = 3.6365642436654273 km/s'''
+
+# x , f_x, error = differential_correction(
+#     x0 = np.array([np.deg2rad(91.12438014889646), np.deg2rad(265.06900325166424), 3.6365642436654273]).reshape(3, 1),
+#     y_d = r2_mars.reshape(3,1),
+#     targetting_function = mars_position_target_function,
+#     function_args = (earth_parking, departure_date, arrival_date),
+#     step_sizes = np.array([np.deg2rad(.01), np.deg2rad(.01), .01]).reshape(3, 1),
+#     tol = np.array([10e-4, 10e-4, 10e-4]).reshape(3, 1),
+#     max_i = 50,
+#     orbit = earth_parking
+# )
+# print(f"\nParking Orbit RAAN = {np.rad2deg(x[0][0])} deg  | Parking Orbit AOP = {np.rad2deg(x[1][0])} deg | dV = {x[2][0]} km/s\n")
+# print(f'Heliocentric Position of Spacecraft at Mars arrival TOF: {f_x.flatten()} km with error of {error.flatten()} km compared to the target position {r2_mars.flatten()} km \n')
+# dV = x[2][0]
 # --------------------------------------------------------------------------------------Step 5: Differential Correction: Mars B-Plane Targettings---------------------------------------------------------------------------------------
 print("\n------------------------------------------------------------------------------------------------Phase 3: B-Plane Targetting ------------------------------------------------------------------------------------------------n")
 # x = np.array([np.deg2rad(91.12437422103665), np.deg2rad(265.0703882273781), 3.6368109087080462]).reshape(3, 1)
@@ -1129,21 +1131,9 @@ def bplane_target_function(x, fun_args):
 inc_desired = np.deg2rad(93.0)   # whatever you actually want, checked against the achievable band
 branch = +1
 
-# # actual code to run - 08/13/2026
-# x, f_x, error = differential_correction(
-#     x0 = np.array([x[0][0], x[1][0], x[2][0]]).reshape(3, 1),
-#     y_d = None,  # see note below — target now floats each call
-#     targetting_function = bplane_target_function,
-#     function_args = (earth_parking, earth_soi, mars_soi, departure_date, arrival_date,
-#                       mars_parking, inc_desired, branch),
-#     step_sizes = np.array([np.deg2rad(.01), np.deg2rad(.01), .001]).reshape(3, 1),
-#     tol = np.array([.001, .001]).reshape(2, 1),
-#     max_i = 50,
-#     orbit = earth_parking)
-
-# Shortcut to already converged
+# actual code to run - 08/13/2026
 x, f_x, error = differential_correction(
-    x0 = np.array([np.deg2rad(91.68002603420462), np.deg2rad(265.3348837832464), 3.64154769]).reshape(3, 1),
+    x0 = np.array([x[0][0], x[1][0], x[2][0]]).reshape(3, 1),
     y_d = None,  # see note below — target now floats each call
     targetting_function = bplane_target_function,
     function_args = (earth_parking, earth_soi, mars_soi, departure_date, arrival_date,
@@ -1152,8 +1142,20 @@ x, f_x, error = differential_correction(
     tol = np.array([.001, .001]).reshape(2, 1),
     max_i = 50,
     orbit = earth_parking)
-
 dV = x[2][0]
+
+# Shortcut to already converged
+# x, f_x, error = differential_correction(
+#     x0 = np.array([np.deg2rad(91.68002603420462), np.deg2rad(265.3348837832464), 3.64154769]).reshape(3, 1),
+#     y_d = None,  # see note below — target now floats each call
+#     targetting_function = bplane_target_function,
+#     function_args = (earth_parking, earth_soi, mars_soi, departure_date, arrival_date,
+#                       mars_parking, inc_desired, branch),
+#     step_sizes = np.array([np.deg2rad(.01), np.deg2rad(.01), .001]).reshape(3, 1),
+#     tol = np.array([.001, .001]).reshape(2, 1),
+#     max_i = 50,
+#     orbit = earth_parking)
+# dV = x[2][0]
 
 # results from nonshortcut code b4 fixing diff eq 08/17
 '''[1] BR error: 4181.756605 km | BT error: -29797.896364 km | TOF (floating): 321.143 days
